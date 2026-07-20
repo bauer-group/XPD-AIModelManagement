@@ -23,14 +23,27 @@ TEST_REGION = "us-east-1"
 TEST_BUCKET = "aimm-test"
 
 
-# Rich reads COLUMNS when it builds a Console and hard-wraps output to that width,
-# dropping the space it wrapped on. Any assertion against rendered CLI output is therefore
-# a function of the terminal width AND of incidental string lengths — a tmp_path under
-# pytest-xdist carries an extra `popen-gwN` segment, which is enough to move a wrap point
-# and split "2 file(s)" across lines. Pinning a wide width here makes rendered output
-# deterministic everywhere: locally, in CI, and under -n auto. Set at import time because
-# the Console is built lazily on first use, which can precede any fixture.
-os.environ.setdefault("COLUMNS", "200")
+# Pin the rendered width of ALL CLI output, because assertions against it are otherwise a
+# function of the environment rather than of the code.
+#
+# Two separate knobs, and they are not interchangeable:
+#
+#   TERMINAL_WIDTH is what typer uses for --help. `typer.rich_utils` reads it ONCE, at
+#   module import, into the module-level constant MAX_WIDTH, and hands that to its Console.
+#   Because it is import-time, no fixture and no CliRunner(env=...) can influence it later —
+#   it has to be set here, before any test module imports the CLI. Left unset, MAX_WIDTH is
+#   None, Rich falls back to autodetection, and under a non-TTY that means 80 columns, where
+#   rich wraps long option names mid-token so `--abort-older-than` is simply not present as
+#   a contiguous string.
+#
+#   COLUMNS is what Rich uses for everything else we render (progress, summary lines). Rich
+#   wraps ON a space and drops it, so a wrap inside "2 file(s)" yields "2" + "file(s)" on
+#   separate lines — and a test that strips newlines then sees "2file(s)".
+#
+# Both are forced rather than setdefault: a developer's ambient COLUMNS (or a CI runner's)
+# would otherwise silently reintroduce exactly the width-dependence this removes.
+os.environ["TERMINAL_WIDTH"] = "300"
+os.environ["COLUMNS"] = "300"
 
 
 @pytest.fixture(autouse=True)

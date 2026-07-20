@@ -485,10 +485,14 @@ def test_help_exits_zero_and_documents_every_flag(
 ) -> None:
     """An undocumented flag is an unusable flag, and rich help silently truncates.
 
-    A wide terminal is forced so the assertion tests documentation rather than wrapping.
+    The width that matters here is TERMINAL_WIDTH, pinned in the root conftest at import
+    time — typer reads it into a module constant when `typer.rich_utils` is imported, so
+    passing it through `env=` below would arrive far too late to have any effect. At the
+    non-TTY default of 80 columns rich wraps long option names mid-token, and
+    `--abort-older-than` then exists on screen but not as a contiguous string.
     """
     result = runner.invoke(
-        hf_cli.app, [*path, "--help"], env={"COLUMNS": "300", "TERM": "dumb", "NO_COLOR": "1"}
+        hf_cli.app, [*path, "--help"], env={"TERM": "dumb", "NO_COLOR": "1"}
     )
     assert result.exit_code == 0, result.output
 
