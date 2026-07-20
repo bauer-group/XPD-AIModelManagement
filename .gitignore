@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Virtualenvs / uv
+# NOTE: uv.lock is a DELIVERABLE and is committed on purpose — do not ignore it.
+.venv/
+venv/
+.uv/
+uv-cache/
+requirements-ci.txt
+
+# Working data / staging / secrets
+/data/
+/staging/
+*.env
+.env
+!.env.example
+!.env.template
+*.pem
+*.key
+!tests/**/*.key
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
