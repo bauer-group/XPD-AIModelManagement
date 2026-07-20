@@ -1,0 +1,58 @@
+# Gitleaks configuration.
+#
+# This tool's whole subject is credential handling — S3 access keys and Hugging
+# Face tokens — so the docs, the CLI help and the tests are full of things that
+# are shaped like secrets and are not. The allowlist below keeps the signal
+# useful.
+#
+# It must never be widened to cover `src/`. A finding under `src/` is either a
+# real leak or a docstring that should have used an obvious placeholder; both are
+# worth a human look.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation, tests, and the local MinIO rig's throwaway credentials"
+paths = [
+  '''tests/''',
+  '''docs/''',
+  '''\.md$''',
+  '''\.MD$''',
+]
+regexes = [
+  # Documentation placeholders. §22.4 requires that no credential, not even a
+  # fake-looking one, appears outside a placeholder of this shape.
+  '''<your-[a-z-]+>''',
+  '''CHANGE_ME[A-Z0-9_]*''',
+  '''(EXAMPLE|PLACEHOLDER|REDACTED|xxxxxxxx)[A-Z0-9]*''',
+  # The mask that `aimm hf-backup doctor` and pydantic's SecretStr both print.
+  # It looks like a fixed-length opaque token to an entropy-based rule.
+  '''\*{6,}''',
+  # Local MinIO rig credentials (tests/integration/docker-compose.yml, §21).
+  # They authorise nothing beyond two containers on localhost and are part of
+  # the rig's declarative bootstrap, so they are committed on purpose. Named
+  # explicitly rather than blanket-allowing the compose file, so that a REAL key
+  # pasted into that file is still a finding.
+  '''\$\{?AIMM_IT_(ACCESS|SECRET)_KEY\}?''',
+  '''MINIO_ROOT_(USER|PASSWORD)''',
+  '''CONSOLE_(USER|PASSWORD)''',
+  # The same rig, driven from CI. `.github/workflows/` is deliberately NOT in the
+  # `paths` allowlist above — a real key committed to a workflow must always be a
+  # finding — so the two throwaway literals in integration.yml are named here one
+  # by one. They exist for the lifetime of one ephemeral container and grant
+  # access to nothing else.
+  '''aimm-it-ci-user''',
+  '''aimm-it-ci-throwaway-secret''',
+  # Hugging Face token PREFIXES quoted in prose when explaining what not to
+  # paste. The default rules also match the real thing, which is the point:
+  # this only excuses the bare prefix, not a full-length token.
+  '''hf_(token|xxx|placeholder)\b''',
+]
+stopwords = [
+  "example",
+  "placeholder",
+  "redacted",
+  "sample",
+  "changeme",
+]

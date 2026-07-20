@@ -1,0 +1,58 @@
+site_name: BAUER GROUP - AI Model Management
+site_description: Swiss-army-knife toolkit for AI model development and management, starting with failsafe Hugging Face to S3 backup, verification and restore
+repo_url: https://github.com/bauer-group/XPD-AIModelManagement
+repo_name: bauer-group/XPD-AIModelManagement
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/brightness-7, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/brightness-4, name: Switch to light mode }
+
+validation:
+  # `warn` is the strongest value mkdocs accepts here (`error` is rejected outright).
+  # `make docs` runs `mkdocs build --strict`, which promotes every warning — broken
+  # anchors included — into a failed build, so the documented rule that every reference
+  # must exist is actually enforced rather than scrolling past.
+  anchors: warn
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+  - toc: { permalink: true }
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Installation: installation.md
+      - Quickstart: quickstart.md
+      - Configuration: configuration.md
+  - Guides:
+      - CLI reference: cli.md
+      - Transfer strategy: transfer-strategy.md
+      - Integrity: integrity.md
+      - Storage backends: backends.md
+      - Operations: operations.md
+      - Troubleshooting: troubleshooting.md
+  - Reference:
+      - Architecture: architecture.md
+      - Development: development.md
+      - Decision records:
+          - 0001 CLI and package architecture: adr/0001-cli-and-package-architecture.md
+          - 0002 Transfer strategy: adr/0002-transfer-strategy.md
+          - 0003 Integrity and manifest: adr/0003-integrity-and-manifest.md
+          - 0004 Container and distribution (superseded): adr/0004-container-and-distribution.md
+          - 0005 Dependency management with uv (superseded): adr/0005-dependency-management-with-uv.md
+          - 0006 PyPI distribution: adr/0006-pypi-distribution.md

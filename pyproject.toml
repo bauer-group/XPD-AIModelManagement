@@ -1,92 +1,198 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name = "aimm"
-version = "0.1.0"
-description = "BAUER GROUP AI model management toolkit — lifecycle backup of Hugging Face repositories to S3-compatible storage"
-readme = "README.md"
+name = "bg-ai-model-management"
+dynamic = ["version"]
+description = "BAUER GROUP AI model management toolkit — a swiss-army knife for AI model development and operations, starting with failsafe Hugging Face to S3 backup, verification and restore"
+readme = "README.MD"
+license = "MIT"
 requires-python = ">=3.12"
-license = { text = "MIT" }
-authors = [{ name = "Karl Bauer", email = "kb@de.bauer-group.com" }]
-keywords = ["huggingface", "backup", "s3", "minio", "machine-learning"]
+authors = [
+    {name = "BAUER GROUP (Karl Bauer)", email = "karl.bauer@bauer-group.com"},
+]
+
+keywords = [
+    "huggingface", "s3", "minio", "backup", "restore", "machine-learning",
+    "model-management", "mlops", "devops", "self-hosted",
+]
+
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
+    "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: System :: Archiving :: Backup",
-    "Typing :: Typed",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
 ]
+
+# ── Mandatory core ───────────────────────────────────────────────────────────
+# This is an APPLICATION, not a library: every dependency below is needed on
+# every run. Extras exist only for dev/docs.
+#
+# Floors are the versions actually VERIFIED during design — raising a floor is
+# always safe, guessing a lower one is not. Upper bounds are the house answer to
+# reproducibility for a published package (a wheel ships ranges, not a lockfile),
+# so there is deliberately no uv.lock in this repo.
 dependencies = [
-    "huggingface_hub>=1.24.0,<2",
-    "boto3>=1.36.0",
-    "botocore>=1.36.0",
-    "httpx>=0.28.1,<1",
-    "typer>=0.27.0",
-    "rich>=15.0.0",
-    "pydantic>=2.13.4",
-    "pydantic-settings>=2.14.2",
-    "tenacity>=9.1.4",
-    "PyYAML>=6.0.3",
+    # 1.x API verified on 1.24.0: repo_info().sha, list_repo_tree, RepoFile.path,
+    # the `errors` module, get_session() -> httpx.Client. Capped below 2 because
+    # streaming via get_session() is working-but-not-blessed.
+    "huggingface_hub>=1.24.0,<2.0.0",
+    # Config(request_checksum_calculation=...) FIRST EXISTS in botocore 1.36.0.
+    # Bisected: 1.35.99 lacks the key entirely and the env vars silently do
+    # nothing there. botocore is pinned explicitly, not just transitively.
+    "boto3>=1.36.0,<2.0.0",
+    "botocore>=1.36.0,<2.0.0",
+    # Imported directly for exception types and iter_bytes; hub 1.x requires <1.
+    "httpx>=0.28.1,<1.0.0",
+    # Annotated style, keyword-only add_typer, rich_help_panel, envvar precedence.
+    "typer>=0.27.0,<1.0.0",
+    # Progress RLock thread-safety verified by source reading + a 5-thread test.
+    "rich>=15.0.0,<17.0.0",
+    "pydantic>=2.13.4,<3.0.0",
+    "pydantic-settings>=2.14.2,<3.0.0",
+    # wait_random_exponential, reraise, injectable sleep.
+    "tenacity>=9.1.4,<10.0.0",
+    "PyYAML>=6.0.3,<7.0.0",
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest>=9.1.1",
-    "pytest-cov>=7.1.0",
-    "moto[s3]>=5.2.2",
+dev = [
+    # Testing
+    "pytest>=9.1.1,<10.0.0",
+    "pytest-cov>=7.1.0,<8.0.0",
+    "moto[s3]>=5.2.2,<6.0.0",
+    # Quality
     "ruff>=0.15.22",
     "mypy>=2.3.0",
     "types-boto3[s3]>=1.43.51",
+    # Build & release (CI uses the reusable workflow; these are for local runs)
+    "python-semantic-release>=9.0.0",
+    "build>=1.0.0",
+    "twine>=5.0.0",
+    "pre-commit>=3.5.0",
 ]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.26.0",
+]
+
+[project.scripts]
+aimm = "bg_ai_model_management.main:main"
+
+# Extension seam for tools #2..N: a tool is a subpackage exporting `app: typer.Typer`
+# plus one line here. The core discovers and mounts them at CLI startup and never
+# needs to know they exist. The group name intentionally tracks the CLI name.
+[project.entry-points."aimm.tools"]
+hf-backup = "bg_ai_model_management.tools.hfbackup.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/bauer-group/XPD-AIModelManagement"
 Source = "https://github.com/bauer-group/XPD-AIModelManagement"
 Issues = "https://github.com/bauer-group/XPD-AIModelManagement/issues"
+Changelog = "https://github.com/bauer-group/XPD-AIModelManagement/blob/main/CHANGELOG.md"
 
-[project.scripts]
-aimm = "aimm.main:main"
+# ── Hatch build ──────────────────────────────────────────────────────────────
+[tool.hatch.version]
+path = "src/bg_ai_model_management/__init__.py"
 
-# Tools register here; the root CLI discovers and mounts them at runtime as
-# typer.Typer sub-apps. Tools #2..#N mount without editing the core.
-[project.entry-points."aimm.tools"]
-hf-backup = "aimm.tools.hfbackup.cli:app"
+[tool.hatch.build.targets.wheel]
+packages = ["src/bg_ai_model_management"]
+# PEP 561 marker. Without it the published wheel is untyped and mypy resolves the whole
+# package as `Any` for every downstream consumer.
+artifacts = ["src/bg_ai_model_management/py.typed"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/bg_ai_model_management",
+    "/tests",
+    "/docs",
+    "README.MD",
+    "CHANGELOG.md",
+    "LICENSE",
+    "pyproject.toml",
+]
 
+# ── Semantic release ─────────────────────────────────────────────────────────
+# Version is dynamic (sourced from __init__.py via hatch), so we update ONLY the
+# __version__ variable — there is no static project.version to rewrite.
+[tool.semantic_release]
+version_variables = ["src/bg_ai_model_management/__init__.py:__version__"]
+branch = "main"
+build_command = "python -m build"
+commit_parser = "conventional"
+major_on_zero = false
+
+# PSR 10 moved the changelog path under [changelog.default_templates]; a bare
+# top-level `changelog_file` is SILENTLY IGNORED. mode = "init" rebuilds the whole
+# file from tags each run, so it needs no insertion marker.
+[tool.semantic_release.changelog]
+mode = "init"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "chore", "ci", "build", "revert"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+# ── Tooling ──────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
+minversion = "8.0"
 testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = "-ra --import-mode=importlib"
-markers = ["integration: requires a live MinIO (set AIMM_IT_ENDPOINT)"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--tb=short"]
+markers = [
+    "integration: needs the live MinIO rig (deselect with '-m \"not integration\"')",
+]
+
+[tool.coverage.run]
+source = ["src/bg_ai_model_management"]
+omit = ["tests/*", "*/__init__.py", "scripts/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
 
 [tool.ruff]
-line-length = 100
+# Lint against the FLOOR of the supported range so we never use syntax newer than
+# Python 3.12 (the minimum we ship).
 target-version = "py312"
-src = ["src", "tests"]
+line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RET", "PTH", "ARG", "TID"]
-ignore = ["B008"] # typer.Option(...) in defaults is the framework idiom
-
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG"] # pytest fixtures are legitimately unused arguments
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# UP042 wants `enum.StrEnum` instead of `(str, Enum)`. Declined deliberately: the two are
+# NOT interchangeable here. `str(RepoType.models)` is "RepoType.models" under `(str, Enum)`
+# but "models" under StrEnum, so switching silently rewrites every f-string and log line
+# that interpolates one of these members. The `(str, Enum)` form is also the normative
+# literal source in CONTRACT_FINAL.md sections 3 and 5.2, which the tools, the docs and the
+# settings models were all written against.
+ignore = ["E501", "UP042"]
 
 [tool.mypy]
-python_version = "3.14"
+# Type-check against the minimum supported version.
+python_version = "3.12"
 strict = true
-files = ["src", "tests"]
-mypy_path = "src"
-warn_unreachable = true
-
-[[tool.mypy.overrides]]
-module = ["moto.*"]
+warn_return_any = true
+warn_unused_configs = true
 ignore_missing_imports = true

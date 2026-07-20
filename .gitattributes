@@ -1,14 +1,19 @@
 # =============================================================================
-# Line endings — enforce LF consistently across all platforms.
+# Line endings — LF everywhere, enforced by Git, not by hope.
 # -----------------------------------------------------------------------------
-# This is a Linux-container project: the image, shell, Python and every config
-# file run on Linux, so LF is mandatory. `eol=lf` makes Git store AND check out
-# LF regardless of the contributor's core.autocrlf setting, which also silences
-# the "LF will be replaced by CRLF" warnings on Windows. CRLF additionally
-# breaks POSIX-sh heredocs inside Dockerfile RUN blocks.
+# Development happens on Windows; CI, the MinIO rig and every consumer of the
+# published wheel run on Linux. `eol=lf` makes Git store AND check out LF no
+# matter what the contributor's core.autocrlf says, which is the only setting
+# that survives a fresh clone on a new machine.
+#
+# This is not cosmetic. A CRLF checkout silently breaks:
+#   - POSIX sh scripts        (`\r` becomes part of the last argument)
+#   - YAML heredocs and the inline `content:` blocks in the compose rig
+#   - the Makefile            (recipes end in `\r`; targets fail with no clue)
+# All of those fail on the Linux side, long after the Windows side looked fine.
 # =============================================================================
 
-# Default: treat everything as text and normalize to LF in the working tree.
+# Default: everything is text and is normalised to LF.
 * text=auto eol=lf
 
 # ── Source & config (must always be LF) ──────────────────────────────────────
@@ -19,29 +24,30 @@
 *.yml     text eol=lf
 *.yaml    text eol=lf
 *.json    text eol=lf
+*.jsonc   text eol=lf
 *.toml    text eol=lf
 *.cfg     text eol=lf
 *.ini     text eol=lf
 *.md      text eol=lf
+*.MD      text eol=lf
 *.txt     text eol=lf
-*.env     text eol=lf
 
-# Dotfiles / files without an extension
+# ── Dotfiles and extensionless files ─────────────────────────────────────────
 .gitignore        text eol=lf
 .gitattributes    text eol=lf
-.dockerignore     text eol=lf
 .editorconfig     text eol=lf
-.env.example      text eol=lf
-.python-version   text eol=lf
-Dockerfile        text eol=lf
-Dockerfile.*      text eol=lf
-*.Dockerfile      text eol=lf
+.markdownlint.jsonc text eol=lf
+.gitleaks.toml    text eol=lf
+Makefile          text eol=lf
 CODEOWNERS        text eol=lf
+LICENSE           text eol=lf
 
-# ── Generated / lock (LF, but excluded from diffs) ───────────────────────────
-uv.lock   text eol=lf linguist-generated=true
+# Make.cmd is the Windows twin of the Makefile and is interpreted by cmd.exe.
+# cmd.exe tolerates LF, and keeping it LF means the two twins diff cleanly
+# against each other.
+Make.cmd  text eol=lf
 
-# ── Binary (never normalize) ─────────────────────────────────────────────────
+# ── Binary (never normalise, never diff) ─────────────────────────────────────
 *.png     binary
 *.jpg     binary
 *.jpeg    binary
@@ -53,8 +59,11 @@ uv.lock   text eol=lf linguist-generated=true
 *.tgz     binary
 *.tar     binary
 *.zip     binary
-*.dump    binary
-*.age     binary
-*.gpg     binary
 *.whl     binary
+*.gpg     binary
+# Model weights. They have no business in this repo, but if one ever lands here
+# by accident it must not be line-ending-mangled on top of everything else.
 *.safetensors binary
+*.bin     binary
+*.gguf    binary
+*.onnx    binary

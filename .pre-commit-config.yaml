@@ -1,0 +1,46 @@
+minimum_pre_commit_version: '3.5.0'
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Keep this in lockstep with the `ruff` floor in pyproject.toml's [dev]
+    # extra. A hook older than the CLI reports different findings than
+    # `make lint`, and the disagreement is invisible until CI contradicts a
+    # green commit.
+    rev: v0.15.22
+    hooks:
+      - id: ruff
+        args: [--fix]
+      # Formatting is a manual stage on purpose: a formatter that rewrites files
+      # under you mid-commit turns one review into two. Run it deliberately with
+      # `pre-commit run ruff-format --all-files --hook-stage manual`.
+      - id: ruff-format
+        stages: [manual]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Two trailing spaces are a hard line break in Markdown.
+        args: [--markdown-linebreak-ext=md,MD]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+        # .markdownlint.jsonc has comments and is not JSON. Excluded rather than
+        # renamed, because markdownlint looks for exactly this filename.
+        exclude: '^\.markdownlint\.jsonc$'
+      - id: check-added-large-files
+        # Model weights are measured in gigabytes and this repo backs them up
+        # rather than storing them. Anything past 2 MB here is an accident.
+        args: [--maxkb=2000]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        # Matches .gitattributes. Development happens on Windows, so this is the
+        # hook that catches a CRLF file before CI does.
+        args: [--fix=lf]
+      # This tool exists to move credentials between systems safely; committing
+      # one would be both ironic and expensive.
+      - id: detect-private-key

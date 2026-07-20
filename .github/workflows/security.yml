@@ -1,0 +1,41 @@
+# =============================================================================
+#  🔒 Security Management
+# -----------------------------------------------------------------------------
+#  WHAT         : Secret scanning (gitleaks + GitGuardian) and dependency
+#                 review across the whole tree.
+#  WHEN         : Push to main, every PR, weekly, and on demand.
+#  PRODUCES     : Security findings in the Security tab; fails the build on a
+#                 leaked credential.
+#  WHY IT MATTERS HERE : this tool's users hold a Hugging Face token and S3
+#                 access/secret key pairs. A credential committed here is a
+#                 storage-fleet incident, not a repo-scoped one.
+#  REQUIREMENTS : Org secrets, inherited.
+#  PERMISSIONS  : Must be granted HERE. A called workflow's `permissions:` block
+#                 is a request ceiling, not a grant -- the token is minted from
+#                 the caller's scopes. These three mirror what
+#                 modules-security-scan.yml declares; dropping any fails at
+#                 parse.
+# =============================================================================
+name: 🔒 Security Management
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  security:
+    uses: bauer-group/automation-templates/.github/workflows/modules-security-scan.yml@main
+    with:
+      scan-engine: 'both'
+      scan-type: 'all'
+    secrets: inherit

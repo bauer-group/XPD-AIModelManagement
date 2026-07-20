@@ -1,0 +1,42 @@
+# =============================================================================
+#  🏷️ PR path labels
+# -----------------------------------------------------------------------------
+#  Consumed by actions/labeler@v6 via the pr-labeler workflow. Its absence is a
+#  HARD failure -- labeler fetches this path through the contents API and dies
+#  with "Not Found" if it is missing.
+#
+#  The sibling triage-rules.yml is deliberately NOT present: the labeler-triage
+#  action checks for it and logs "No custom rules file found" when absent, so it
+#  is optional. Carrying it would mean review teams, Slack channels and
+#  two-approval auto-merge in a solo-developer repo -- goldplating.
+#
+#  Every label below already EXISTS in the repo. Do not add one that does not --
+#  labels feed triage and the changelog, and inventing them here pollutes both.
+# =============================================================================
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - '**/*.md'
+          - '**/*.MD'
+          - mkdocs.yml
+
+github-actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+
+# pyproject.toml is the single dependency manifest -- there is no
+# requirements.txt and no lockfile in this repo. Reproducibility comes from the
+# upper bounds declared there.
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - pyproject.toml
+
+python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/**/*.py
+          - tests/**/*.py

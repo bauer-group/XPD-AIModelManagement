@@ -1,0 +1,58 @@
+# =============================================================================
+#  🐍 CI/CD Pipeline (Automatic Release)
+# -----------------------------------------------------------------------------
+#  WHAT         : Semantic-release on every push to main: parse Conventional
+#                 Commits, bump __version__, regenerate CHANGELOG.MD, tag,
+#                 build the wheel, cut the GitHub release, publish to PyPI.
+#  WHEN         : Push to main (code paths only); manual dispatch.
+#  PRODUCES     : A git tag vX.Y.Z, a GitHub release, and a PyPI publish of
+#                 bg-ai-model-management.
+#  REQUIREMENTS : Org secrets, inherited. There is no PYPI_API_TOKEN -- the
+#                 publish uses PyPI trusted publishing, which mints a
+#                 short-lived OIDC token instead.
+#  PERMISSIONS  : Must be granted HERE. A called workflow's `permissions:` block
+#                 is a request ceiling, NOT a grant -- the GITHUB_TOKEN is
+#                 minted from the caller's scopes. These seven mirror what
+#                 python-semantic-release.yml declares; dropping any fails at
+#                 parse or, worse, halfway through a release. `id-token: write`
+#                 is what makes trusted publishing work: without it the publish
+#                 fails after the tag is already pushed, leaving a released tag
+#                 with no artefact.
+# =============================================================================
+name: 🐍 CI/CD Pipeline (Automatic Release)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '*.md', '*.MD']
+  workflow_dispatch:
+    inputs:
+      skip-pypi:
+        description: 'Build and tag but do not publish to PyPI'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+  checks: write
+  security-events: write
+  actions: read
+
+jobs:
+  release:
+    uses: bauer-group/automation-templates/.github/workflows/python-semantic-release.yml@main
+    with:
+      # The release runs on 3.14 while the wheel supports 3.12+. That is
+      # intentional and harmless: a pure-Python wheel is built py3-none-any.
+      python-version: '3.14'
+      run-tests: true
+      run-security-scan: true
+      security-engine: 'both'
+      build-local-wheel: true
+      # The escape hatch when PyPI is degraded: tag and build, publish later.
+      skip-pypi: ${{ inputs.skip-pypi || false }}
+      update-documentation: true
+    secrets: inherit

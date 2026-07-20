@@ -34,6 +34,36 @@ def _utf8_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
+def clean_aimm_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remove every variable the settings layer reads from the ambient environment.
+
+    A maintainer who exports `AIMM_S3__BUCKET` in their shell would otherwise see
+    precedence tests fail for reasons that have nothing to do with the code.
+    """
+    for name in list(os.environ):
+        if name.startswith(("AIMM_", "AWS_")):
+            monkeypatch.delenv(name, raising=False)
+    for name in ("HF_TOKEN", "HF_ENDPOINT", "HUGGING_FACE_HUB_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def secrets_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A stand-in for `/run/secrets`, wired into `Settings.model_config`.
+
+    `secrets_dir` is class-level pydantic configuration, so it cannot be passed per
+    call. `load_settings` derives a fresh subclass on every call, which picks the
+    patched value up; monkeypatch restores the original afterwards.
+    """
+    from bg_ai_model_management.config.models import Settings
+
+    path = tmp_path / "run-secrets"
+    path.mkdir()
+    monkeypatch.setitem(Settings.model_config, "secrets_dir", str(path))
+    return path
+
+
+@pytest.fixture
 def staging_dir(tmp_path: Path) -> Path:
     """An empty directory usable as `transfer.staging_dir`."""
     path = tmp_path / "staging"

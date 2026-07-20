@@ -1,41 +1,76 @@
-# Python
+# Byte-compiled / optimised
 __pycache__/
 *.py[cod]
-*.egg-info/
-.eggs/
+*$py.class
+*.so
+
+# Distribution / packaging
 build/
 dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing / coverage
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .coverage
 .coverage.*
 coverage.xml
 htmlcov/
+.hypothesis/
 
-# Virtualenvs / uv
-# NOTE: uv.lock is a DELIVERABLE and is committed on purpose — do not ignore it.
-.venv/
-venv/
-.uv/
-uv-cache/
-requirements-ci.txt
+# Type checking / linting
+.mypy_cache/
+.ruff_cache/
 
-# Working data / staging / secrets
-/data/
-/staging/
-*.env
-.env
-!.env.example
-!.env.template
-*.pem
-*.key
-!tests/**/*.key
+# MkDocs output. `docs/` itself is a deliverable and is NOT ignored.
+/site/
 
-# Editor / OS
+# Editors / OS
 .vscode/
 .idea/
+.claude/
 *.swp
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ── Credentials ──────────────────────────────────────────────────────────────
+# This tool handles S3 keys and Hugging Face tokens. Anything shaped like a
+# credential stays out of the tree by default.
+.env
+.env.*
+!.env.example
+!.env.template
+.pypirc
+*.pem
+*.key
+
+# A resolved aimm profile in the CWD normally holds interpolated secrets, so it
+# is ignored. `aimm.example.yaml` is the documented, credential-free sample and
+# is meant to be committed.
+/aimm.yaml
+/aimm.yml
+!aimm.example.yaml
+
+# Throwaway keys minted by the local MinIO rig. They authorise nothing beyond
+# two containers on localhost, but a key in git is a key in git.
+tests/integration/keys/
+
+# ── No lockfile, deliberately ────────────────────────────────────────────────
+# Nothing in this repo would consume one: CI installs with `pip install -e
+# ".[dev]"`, and consumers get a PyPI wheel and resolve the ranges in
+# pyproject.toml themselves. Reproducibility comes from dependency UPPER BOUNDS
+# (see the comment above `dependencies` in pyproject.toml), which is the house
+# pattern for a published wheel.
+#
+# These entries exist so that a stray `uv sync` or `poetry lock` on someone's
+# machine cannot quietly introduce a second source of truth that drifts against
+# pyproject.toml. Reversing the decision means changing CI first, not adding a
+# file here.
+uv.lock
+poetry.lock

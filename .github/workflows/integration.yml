@@ -1,0 +1,96 @@
+# =============================================================================
+#  🔬 Integration Tests
+# -----------------------------------------------------------------------------
+#  WHAT         : A real S3 endpoint. Boots the MinIO rig from the
+#                 organisation's own images and exercises the destination
+#                 backend against it -- multipart, checksums, listing, prune.
+#  WHEN         : Push to main and PRs touching the destination backend or the
+#                 rig; nightly; manual dispatch.
+#  PRODUCES     : A pass/fail gate on the tool's central promise -- that bytes
+#                 survive the round trip.
+#  WHY SEPARATE : Needs Docker and takes longer than the unit gate, which must
+#                 stay fast enough to run on every keystroke.
+#  REQUIREMENTS : Docker (present on ubuntu-latest). No org secrets: the rig
+#                 mints throwaway, policy-scoped credentials from the AIMM_IT_*
+#                 variables below. They are not secrets and must never be
+#                 pointed at a real bucket.
+#  PERMISSIONS  : contents: read only.
+# =============================================================================
+name: 🔬 Integration Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/bg_ai_model_management/tools/hfbackup/destination.py'
+      - 'tests/integration/**'
+      - '.github/workflows/integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/bg_ai_model_management/tools/hfbackup/destination.py'
+      - 'tests/integration/**'
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# One source of truth for the rig. `docker compose` interpolates the credential
+# pair into the inline init config, and pytest reads the same values back --
+# so the bootstrap and the tests cannot drift apart. AIMM_IT_ENDPOINT is the
+# gate: unset, the integration tests skip instead of erroring.
+env:
+  # Port 9800, NOT 9000. The rig publishes the S3 API as "${AIMM_RIG_API_PORT:-9800}:9000"
+  # so that it never collides with a developer's own MinIO on the default port. Pointing
+  # this at 9000 makes the gate resolve to a port nothing is listening on.
+  AIMM_IT_ENDPOINT: http://localhost:9800
+  AIMM_IT_BUCKET: aimm-it
+  AIMM_IT_REGION: eu-north1
+  AIMM_IT_ACCESS_KEY: aimm-it-ci-user
+  AIMM_IT_SECRET_KEY: aimm-it-ci-throwaway-secret
+
+jobs:
+  integration:
+    name: 🔬 Real S3 round trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: 📦 Install
+        run: pip install -e ".[dev]"
+
+      # `--wait` blocks until the healthcheck passes, which is what makes the
+      # rig usable without a sleep loop.
+      - name: 🚢 Start the rig
+        run: docker compose -f tests/integration/docker-compose.yml up -d --wait
+
+      # The whole tree, filtered by the marker -- NOT `pytest tests/integration`.
+      # The integration tests that exist live next to the unit tests they extend
+      # (tests/hfbackup/test_destination.py), so scoping the run to
+      # tests/integration/ collected zero tests and the job passed vacuously while
+      # spinning up a MinIO for nothing. The marker is the selector; the path is not.
+      - name: 🔬 Test
+        run: pytest tests -m integration -q
+
+      - name: 🪵 Rig logs
+        if: failure()
+        run: docker compose -f tests/integration/docker-compose.yml logs --no-color
+
+      # `if: always()` so a failed test still frees the volumes.
+      - name: 🧹 Tear down
+        if: always()
+        run: docker compose -f tests/integration/docker-compose.yml down -v

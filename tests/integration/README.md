@@ -1,0 +1,208 @@
+# Integration test rig
+
+A real MinIO server, reached with a least-privilege credential, so the integration
+tests exercise `aimm hf-backup` against something that behaves like production
+instead of against a mock that accepts almost anything.
+
+Everything here is throwaway and local. The rig binds only to loopback ports and
+its credentials grant access to nothing but a container on your machine.
+
+## Quick start
+
+```bash
+docker compose -f tests/integration/docker-compose.yml up -d --wait
+export AIMM_IT_ENDPOINT=http://localhost:9800
+pytest tests -m integration
+docker compose -f tests/integration/docker-compose.yml down -v
+```
+
+Or via the Makefile: `make minio-up`, `make integration`, `make minio-down`.
+
+`AIMM_IT_ENDPOINT` is the gate. With it unset, `tests/integration/` skips at
+collection time, so `make test` on a laptop with no Docker reports skips and never
+errors. Nothing in this directory can fail the default unit run.
+
+## Ports
+
+The S3 API is on **9800** and the console on **9801** — deliberately not 9000/9001.
+Plenty of developers already run their own MinIO on the default ports, and a rig
+that steals them is a rig nobody starts twice. Override with `AIMM_RIG_API_PORT`
+and `AIMM_RIG_CONSOLE_PORT` if 9800/9801 clash on your machine.
+
+> This differs from `CONTRACT_FINAL.md` §21.4, which documents a default of
+> `http://localhost:9000`. The port move was an explicit later instruction. Anything
+> that hard-codes the rig endpoint — CI workflows, Makefile targets, docs — should
+> use 9800.
+
+## Services
+
+| Service | Image | Role |
+| --- | --- | --- |
+| `minio` | `ghcr.io/bauer-group/cs-minio/minio` | the S3 endpoint under test |
+| `minio-init` | `ghcr.io/bauer-group/cs-minio/minio-init` | one-shot, idempotent, declarative bootstrap |
+| `minio-console` | `ghcr.io/bauer-group/cs-minio/minio-console` | opt-in web UI for humans |
+
+The console sits behind a compose profile and CI never starts it. To browse objects
+locally:
+
+```bash
+docker compose -f tests/integration/docker-compose.yml --profile console up -d
+# http://localhost:9801 — log in as aimm-rig-console / aimm-rig-console-secret
+```
+
+`minio-init` reads its configuration from a top-level compose `configs:` block with
+inline `content:`, so the whole rig is one file with nothing to mount. Inside that
+inline JSON every placeholder is written `$${VAR}` with a doubled dollar, and the
+schema key is `$$schema`. This is load-bearing: Compose interpolates `${...}` inside
+inline content before the container ever sees it, so a single dollar would be
+substituted by Compose — usually to an empty string — and the bootstrap would create
+a user with a blank access key. The doubled form makes Compose emit a literal
+`${VAR}`, which `minio-init` then resolves from its own environment.
+
+## Least privilege is the point
+
+The tests never authenticate as root. `minio-init` creates a bucket, an IAM policy
+`pAimmIt`, a group `gAimmIt`, a policy-scoped user, and a service account under that
+user. The credential the tests use can reach exactly one bucket and can perform
+exactly the operations the tool actually performs.
+
+That is not decoration. If `S3Destination` grows a call needing an IAM action nobody
+granted, it fails here — loudly, in CI — rather than the first time someone points
+the tool at a properly locked-down production bucket.
+
+### What the policy grants
+
+On `arn:aws:s3:::aimm-it/*`: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`,
+`s3:AbortMultipartUpload`.
+
+On `arn:aws:s3:::aimm-it`: `s3:ListBucket`, `s3:GetBucketLocation`,
+`s3:ListBucketMultipartUploads`.
+
+### What it deliberately withholds
+
+- **`s3:CreateBucket`** — `ensure_bucket` defaults to off. Withholding this proves
+  the default stays off. Verified against the rig: pointing `S3Destination.create`
+  at a bucket outside the policy raises `AuthError` (`head_bucket ... refused: 403`)
+  rather than quietly creating one.
+- **`s3:GetObjectAttributes`** — support is unverified on MinIO, and `probe()` treats
+  it as a *discovered* capability. Verified against the rig: the probe resolves
+  `supports_get_object_attributes=False` and carries on, which is the correct
+  outcome, not a failure.
+- **`s3:ListMultipartUploadParts`** — the organisation's production policies include
+  it, but `destination.py` never calls `list_parts`; it completes a multipart upload
+  from the part list it already holds, and `abort_stale_uploads` uses
+  `list_multipart_uploads` (bucket-level, granted above). Verified against the rig: a
+  two-part 5 MiB upload completes without it, returning the `-2` ETag suffix and
+  `PartsCount: 2`. It is omitted so that the day someone adds a `list_parts` call,
+  the rig says so. If `CompleteMultipartUpload` ever returns `AccessDenied` here,
+  granting it is the fix — and that is a finding worth having.
+
+### The service account
+
+`minio-init` creates the service account with credentials **generated by MinIO**, not
+predetermined — the image offers no way to pin them — and writes them to
+`/data/credentials/aimm-it-sa.json` inside the init container, mode 0600. To
+authenticate with it:
+
+```bash
+docker compose -f tests/integration/docker-compose.yml \
+  cp minio-init:/data/credentials/aimm-it-sa.json ./sa.json
+export AIMM_IT_CREDENTIALS_FILE=$PWD/sa.json
+```
+
+When `AIMM_IT_CREDENTIALS_FILE` is unset the fixtures fall back to the deterministic
+policy-scoped user (`aimm-it-user`), which carries the same `pAimmIt` policy. Both
+are non-root; the fallback exists so the rig is usable in one command with no export
+step, which is what CI does. The rig's root credentials are not reachable from
+`conftest.py` at all.
+
+One wart, verified: re-running the bootstrap against an already-provisioned server
+creates an *additional* service account rather than detecting the existing one, so
+repeated `make minio-up` cycles accumulate them. Buckets, policies, users and groups
+are properly idempotent; only this task is not. It is harmless — the credentials file
+is overwritten with the newest pair, so `AIMM_IT_CREDENTIALS_FILE` always points at a
+working credential — and `down -v` clears the lot. The cause is upstream in the
+`minio-init` image, not in this rig.
+
+The credentials volume must be mounted at `/data/credentials` specifically: the image
+pre-creates that path owned by its non-root `init` user, and Docker seeds a fresh
+named volume with the image path's ownership. Mounting elsewhere yields a root-owned
+directory, and the bootstrap then dies with `EACCES` *after* having already created
+the service account — leaving a secret that can never be read back.
+
+## Fixtures
+
+`conftest.py` provides, and owns, only rig-scoped fixtures:
+
+| Fixture | Scope | What it is |
+| --- | --- | --- |
+| `rig_endpoint`, `rig_bucket`, `rig_region` | session | the rig's coordinates |
+| `rig_credentials` | session | the non-root credential pair, with a redacting `repr` |
+| `rig_client` | session | a raw boto3 client, path-style + s3v4, for arrange/assert |
+| `rig_prefix` | function | a key prefix unique to the test, purged afterwards |
+| `rig_settings` | function | `S3Settings` pointed at the rig, scoped to `rig_prefix` |
+| `rig_destination` | function | a probed `S3Destination`, closed afterwards |
+
+Isolation comes from the key space, not from the bucket: the bucket is long-lived
+and shared across tests and runs, so each test gets a random prefix which is purged
+— objects *and* in-flight multipart uploads — on teardown.
+
+`conftest.py` applies both the `integration` marker and, when the rig is down, the
+`skip` marker in `pytest_collection_modifyitems`. Marking centrally means a module
+that forgot `@pytest.mark.integration` cannot be silently deselected by CI's
+`-m integration` and leave the workflow green having run nothing.
+
+The gate is deliberately *not* a module-level
+`pytest.skip(..., allow_module_level=True)` in `conftest.py`, despite
+`CONTRACT_FINAL.md` §21.4 sketching it that way. Verified: that form works for
+`pytest tests`, but when the directory is named directly — `pytest tests/integration
+-m integration` — this conftest is loaded as an *initial* conftest during argument
+parsing, the `Skipped` exception escapes before any collection report exists, and
+pytest dies with a raw traceback and exit code 1 instead of skipping. The marker form
+survives both invocations and exits 0, which is what matters: CI selects by marker
+over the whole tree (`pytest tests -m integration`), never by directory.
+
+## What this rig cannot prove
+
+**This rig speaks plain HTTP.**
+
+botocore only emits the `aws-chunked` checksum **trailer** over HTTPS. This rig
+therefore **cannot reproduce the production trailer-rejection failure that is this
+project's number one unverified risk**. Do not read a green integration run as
+evidence that checksum-trailer behaviour is covered. It is not covered at all.
+
+A green run proves, against a real server: hand-rolled multipart semantics, dense
+part numbering, the `-N` ETag suffix, `PartsCount`, `head_object` `ContentLength`
+after a truncated upload, `ListObjectsV2` pagination past 1000 keys, batched
+deletes, path-style addressing, `StorageClass` rejection, and that the tool works
+under least privilege. It proves nothing about TLS.
+
+That residual risk is exactly why `S3Destination.probe()` probes at runtime rather
+than trusting a backend compatibility table, and why an explicit operator setting
+always beats the probe.
+
+### Why the rig is not on TLS
+
+Serving TLS here was considered and rejected rather than half-done. MinIO would need
+a certificate in its config directory, which means either committing a private key
+and a expiring certificate to the repository, or adding a cert-generating sidecar —
+the `cs-minio` image ships neither `openssl` nor a shell toolchain, so that sidecar
+would be new, unverified machinery. Every client would then need the CA wired in via
+`S3Settings.ca_bundle`, and CI would need the same. `CONTRACT_FINAL.md` §21.5 also
+specifies plain HTTP explicitly.
+
+If the trailer risk needs to be closed, the honest way is a dedicated TLS variant of
+this rig, built and verified as its own piece of work — not a flag bolted onto this
+file that nobody has run. Until then the gap is stated rather than papered over.
+
+## Known backend behaviour found with this rig
+
+**MinIO's `ListMultipartUploads` ignores a partial `Prefix`.** Verified here: with
+two in-flight uploads under `it/`, the unfiltered call returns both, while
+`Prefix="it"`, `"it/"`, `"it/abc"` and `"it/abc/"` all return zero — with or without
+`Delimiter`. Only a `Prefix` equal to a complete object key matches.
+
+This directly affects `S3Destination.abort_stale_uploads`, which passes a directory
+prefix to the server and consequently aborts nothing at all on MinIO. `conftest.py`'s
+own purge works around it by listing unfiltered and filtering in Python. See the
+handover notes — the fix belongs in `destination.py`, not here.

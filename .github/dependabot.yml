@@ -1,0 +1,46 @@
+# =============================================================================
+#  🤖 Dependabot
+# -----------------------------------------------------------------------------
+#  WHAT         : Weekly dependency updates for GitHub Actions and pip.
+#  WHEN         : Sundays, 06:30 Etc/UTC.
+#  PRODUCES     : Grouped minor+patch PRs with semantic commit prefixes, so
+#                 python-semantic-release classifies them correctly.
+# =============================================================================
+version: 2
+
+updates:
+  # ── GitHub Actions ───────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "chore(ci)"
+    labels: ["dependencies", "github-actions", "dependabot"]
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # ── Python ───────────────────────────────────────────────────────────────
+  #  `increase-if-necessary` is load-bearing: our dependencies carry BOTH
+  #  bounds, and the default strategy would rewrite ranges we chose
+  #  deliberately. This setting raises a floor only when the new version
+  #  actually requires it.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    labels: ["dependencies", "python", "dependabot"]
+    versioning-strategy: increase-if-necessary
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
