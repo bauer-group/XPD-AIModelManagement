@@ -23,6 +23,16 @@ TEST_REGION = "us-east-1"
 TEST_BUCKET = "aimm-test"
 
 
+# Rich reads COLUMNS when it builds a Console and hard-wraps output to that width,
+# dropping the space it wrapped on. Any assertion against rendered CLI output is therefore
+# a function of the terminal width AND of incidental string lengths — a tmp_path under
+# pytest-xdist carries an extra `popen-gwN` segment, which is enough to move a wrap point
+# and split "2 file(s)" across lines. Pinning a wide width here makes rendered output
+# deterministic everywhere: locally, in CI, and under -n auto. Set at import time because
+# the Console is built lazily on first use, which can precede any fixture.
+os.environ.setdefault("COLUMNS", "200")
+
+
 @pytest.fixture(autouse=True)
 def _utf8_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force UTF-8 for CliRunner output.

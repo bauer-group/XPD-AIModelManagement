@@ -769,8 +769,12 @@ def test_restore_renders_a_single_line(
     seeded: Seeder, dest_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert run("restore", REPO, "--dest", str(dest_dir), "--revision", SHA_C) == EXIT_OK
-    # rich hard-wraps a long temp path across lines, so match on the tail, not the whole.
-    err = capsys.readouterr().err.replace("\n", "")
+    # Collapse whitespace rather than deleting newlines. Rich wraps ON a space and drops
+    # it, so stripping "\n" fuses the halves back together: a wrap inside "2 file(s)"
+    # became the literal "2file(s)" and failed only where the wrap point happened to land
+    # there. conftest pins COLUMNS so this should no longer wrap at all, but normalising
+    # keeps the assertion true regardless of width.
+    err = " ".join(capsys.readouterr().err.split())
     assert dest_dir.name in err
     assert "2 file(s)" in err
     assert SHA_C[:12] in err
