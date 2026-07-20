@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.0.1 (2026-07-20)
+
+### Bug Fixes
+
+- **tests**: Pinned typer help width via TERMINAL_WIDTH
+  ([`9c97555`](https://github.com/bauer-group/XPD-AIModelManagement/commit/9c975557de0b888bfe04655697486ea308ffa215))
+
+
 ## v1.0.0 (2026-07-20)
 
 ### Bug Fixes
