@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.0.2 (2026-07-21)
+
+### Bug Fixes
+
+- **tests**: Stripped ANSI before matching help output
+  ([`6dc4520`](https://github.com/bauer-group/XPD-AIModelManagement/commit/6dc452000c42babd6408376daf727abf232a396b))
+
+
 ## v1.0.1 (2026-07-20)
 
 ### Bug Fixes
