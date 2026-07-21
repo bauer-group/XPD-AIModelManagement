@@ -1,4 +1,6 @@
-<!-- AUTO-GENERATED FILE. DO NOT EDIT. Edit docs/README.template.MD instead. Generated 2026-07-21. -->
+<!-- AUTO-GENERATED FILE. DO NOT EDIT. Edit docs/README.template.MD instead. -->
+<!-- Generated on 2026-07-21 00:14:55 UTC -->
+
 # BAUER GROUP - AI Model Management Toolkit
 
 [![PyPI](https://img.shields.io/pypi/v/bg-ai-model-management.svg)](https://pypi.org/project/bg-ai-model-management/)
