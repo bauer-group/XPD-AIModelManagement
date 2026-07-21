@@ -1,14 +1,12 @@
-<!-- AUTO-GENERATED FILE. DO NOT EDIT. Edit docs/SECURITY.template.MD instead. Generated 2026-07-21. -->
 # Security Policy
 
-> **BAUER GROUP** | bauer-group/XPD-AIModelManagement
+> **{{COMPANY_NAME}}** | {{REPO_FULL_NAME}}
 
 ## Supported versions
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-| < 1.0 | :x:                |
+{{SUPPORTED_VERSIONS_TABLE}}
 
 Only the latest minor receives fixes. Upgrade before reporting a bug against an
 older one. This table is rendered from `__version__` — see
@@ -16,12 +14,12 @@ older one. This table is rendered from `__version__` — see
 semantic-release bumps the version, and a policy naming the wrong supported
 version is worse than none.
 
-_Last updated: 2026-07-21._
+_Last updated: {{LAST_UPDATED}}._
 
 ## Reporting a vulnerability
 
 Report security issues **privately** to **<security@bauer-group.com>** or via
-[GitHub Security Advisories](https://github.com/bauer-group/XPD-AIModelManagement/security/advisories/new).
+[GitHub Security Advisories]({{REPO_URL}}/security/advisories/new).
 
 Please do not open a public issue for a vulnerability. We aim to acknowledge
 within 2 business days and to ship a fix or mitigation within 30 days.

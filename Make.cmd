@@ -22,6 +22,7 @@ if /I "%~1"=="test-cov" goto test-cov
 if /I "%~1"=="integration" goto integration
 if /I "%~1"=="minio-up" goto minio-up
 if /I "%~1"=="minio-down" goto minio-down
+if /I "%~1"=="render-docs" goto render-docs
 if /I "%~1"=="docs" goto docs
 if /I "%~1"=="build" goto build
 if /I "%~1"=="clean" goto clean
@@ -41,7 +42,8 @@ echo test-cov     - pytest with coverage (gate: 80%%)
 echo integration  - pytest against the MinIO rig (needs minio-up)
 echo minio-up     - start the local MinIO rig
 echo minio-down   - stop the rig and delete its volumes
-echo docs         - build the MkDocs site
+echo render-docs  - render README.MD + SECURITY.MD from docs/*.template.MD
+echo docs         - render the templates, then build the MkDocs site
 echo build        - build sdist + wheel
 echo clean        - remove build/test artefacts
 echo pre-commit   - run every pre-commit hook over the whole tree
@@ -92,7 +94,13 @@ exit /b %errorlevel%
 docker compose -f tests/integration/docker-compose.yml down -v
 exit /b %errorlevel%
 
+:render-docs
+%PY% scripts/generate-docs.py
+exit /b %errorlevel%
+
 :docs
+call "%~f0" render-docs
+if errorlevel 1 exit /b 1
 mkdocs build --strict
 exit /b %errorlevel%
 

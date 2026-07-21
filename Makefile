@@ -4,7 +4,7 @@
 # The command strings here are identical to the ones CI runs (.github/workflows).
 # If they ever diverge, CI is right and this file is the bug.
 .PHONY: help install install-dev lint format type-check test test-cov integration \
-        minio-up minio-down docs build clean pre-commit all-checks
+        minio-up minio-down render-docs docs build clean pre-commit all-checks
 
 PY ?= python
 COMPOSE := docker compose -f tests/integration/docker-compose.yml
@@ -20,7 +20,8 @@ help:
 	@echo "integration  - pytest against the MinIO rig (needs minio-up)"
 	@echo "minio-up     - start the local MinIO rig"
 	@echo "minio-down   - stop the rig and delete its volumes"
-	@echo "docs         - build the MkDocs site"
+	@echo "render-docs  - render README.MD + SECURITY.MD from docs/*.template.MD"
+	@echo "docs         - render the templates, then build the MkDocs site"
 	@echo "build        - build sdist + wheel"
 	@echo "clean        - remove build/test artefacts"
 	@echo "pre-commit   - run every pre-commit hook over the whole tree"
@@ -58,7 +59,10 @@ minio-up:
 minio-down:
 	$(COMPOSE) down -v
 
-docs:
+render-docs:
+	$(PY) scripts/generate-docs.py
+
+docs: render-docs
 	mkdocs build --strict
 
 build:

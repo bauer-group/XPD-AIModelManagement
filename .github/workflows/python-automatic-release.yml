@@ -55,4 +55,10 @@ jobs:
       # The escape hatch when PyPI is degraded: tag and build, publish later.
       skip-pypi: ${{ inputs.skip-pypi || false }}
       update-documentation: true
+      # SECURITY.MD is rendered by scripts/generate-docs.py from our own
+      # docs/SECURITY.template.MD, which derives the supported-versions table from
+      # __version__. The org generator drives off a different config and placeholder
+      # contract, and defaults to true -- left unset it would hard-fail the release the
+      # first time it ran. We own this file; keep it off.
+      update-security-policy: false
     secrets: inherit
