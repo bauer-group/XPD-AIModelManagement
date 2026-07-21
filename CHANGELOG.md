@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v1.0.3 (2026-07-21)
+
+### Bug Fixes
+
+- **build**: Corrected the interpreter in Make.cmd render-docs
+  ([`f9e5510`](https://github.com/bauer-group/XPD-AIModelManagement/commit/f9e5510dbc5bda2e81d26434989d267e9da8a371))
+
+### Chores
+
+- **ci**: Bump actions/setup-python from 6 to 7
+  ([`d8cce80`](https://github.com/bauer-group/XPD-AIModelManagement/commit/d8cce8048a8a365c6f1f451f957da69261a2e75e))
+
+### Documentation
+
+- Added the README template the release renders
+  ([`55258c0`](https://github.com/bauer-group/XPD-AIModelManagement/commit/55258c069c4a6cf81bccd2e1bbdc2156f893c5ac))
+
+- Rendered SECURITY.MD from a template
+  ([`ad899f7`](https://github.com/bauer-group/XPD-AIModelManagement/commit/ad899f7ea42e964328a333d27ba31a2269181097))
+
+
 ## v1.0.2 (2026-07-21)
 
 ### Bug Fixes
