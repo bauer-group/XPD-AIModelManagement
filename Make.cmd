@@ -95,7 +95,7 @@ docker compose -f tests/integration/docker-compose.yml down -v
 exit /b %errorlevel%
 
 :render-docs
-%PY% scripts/generate-docs.py
+python scripts/generate-docs.py
 exit /b %errorlevel%
 
 :docs
