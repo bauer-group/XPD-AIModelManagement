@@ -17,6 +17,7 @@ that is supposed to work offline touches it.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -460,6 +461,19 @@ def is_argument(param: Any) -> bool:
     return getattr(param, "param_type_name", "") == "argument"
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences so rendered text can be matched literally.
+
+    rich emits styling whenever it believes it is writing to a terminal, and on a GitHub
+    runner it believes exactly that. Its option highlighter puts those codes *inside* the
+    option name, so an assertion against the raw output silently stops matching.
+    """
+    return _ANSI.sub("", text)
+
+
 ALL_COMMANDS = list(walk_commands(get_command(hf_cli.app)))
 assert len(ALL_COMMANDS) > 1, "the command walk found nothing; the traversal itself is broken"
 
@@ -483,25 +497,34 @@ def test_the_command_set_is_the_documented_one() -> None:
 def test_help_exits_zero_and_documents_every_flag(
     path: tuple[str, ...], command: click.Command
 ) -> None:
-    """An undocumented flag is an unusable flag, and rich help silently truncates.
+    """An undocumented flag is an unusable flag.
 
-    The width that matters here is TERMINAL_WIDTH, pinned in the root conftest at import
-    time — typer reads it into a module constant when `typer.rich_utils` is imported, so
-    passing it through `env=` below would arrive far too late to have any effect. At the
-    non-TTY default of 80 columns rich wraps long option names mid-token, and
-    `--abort-older-than` then exists on screen but not as a contiguous string.
+    Two environment-dependent effects previously made this pass locally and fail only on
+    the GitHub runners, which is why the assertion below normalises rather than trusting
+    the raw output:
+
+    Width. typer reads TERMINAL_WIDTH into a module constant at import, so it is pinned in
+    the root conftest — an `env=` here would arrive far too late. It matters because at 80
+    columns rich wraps long option names *mid-token*.
+
+    Styling. `GITHUB_ACTIONS` in the ambient environment makes rich classify the stream as
+    a terminal and emit ANSI, and its option highlighter injects those codes *inside* the
+    option name: `--sse-kms-key-id` arrives as `--sse\\x1b[0m-kms-key-id`, so not even
+    `sse-kms` survives as a contiguous substring. `NO_COLOR` does not help — it suppresses
+    colour, not the bold and style codes. `TERM=dumb` is deliberately NOT set: combined
+    with rich's terminal classification it clamps the console to a fixed 80x25 and
+    reintroduces the wrapping this pinning exists to avoid.
     """
-    result = runner.invoke(
-        hf_cli.app, [*path, "--help"], env={"TERM": "dumb", "NO_COLOR": "1"}
-    )
+    result = runner.invoke(hf_cli.app, [*path, "--help"], env={"NO_COLOR": "1"})
     assert result.exit_code == 0, result.output
+    rendered = strip_ansi(result.output)
 
     missing = []
     for param in command.params:
         if is_argument(param):
             continue
         long_opts = [opt for opt in param.opts if opt.startswith("--")]
-        if long_opts and not any(opt in result.output for opt in long_opts):
+        if long_opts and not any(opt in rendered for opt in long_opts):
             missing.append(long_opts[0])
     assert not missing, f"`{' '.join(path)} --help` does not mention: {missing}"
 
