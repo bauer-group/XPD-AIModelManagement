@@ -727,6 +727,14 @@ def sync(
             help="Prefer the xet-accelerated disk path for files that carry a xet hash.",
         ),
     ] = False,
+    abort_stale: Annotated[
+        str,
+        typer.Option(
+            "--abort-stale",
+            help="Abort abandoned multipart uploads of each repository older than this "
+            "before transferring it. 'off' disables the sweep.",
+        ),
+    ] = "24h",
     recheck: Annotated[
         RecheckMode,
         typer.Option(
@@ -779,6 +787,10 @@ def sync(
         recheck=recheck,
         update_ref=update_ref,
         dry_run=dry_run,
+        abort_stale_after=(
+            None if abort_stale.strip().lower() in {"off", "no", "none"}
+            else parse_duration(abort_stale)
+        ),
     )
     with open_destination(settings) as destination, open_source(settings, source) as upstream:
         engine = build_engine(opts, settings, destination, upstream)

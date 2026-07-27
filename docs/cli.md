@@ -77,11 +77,15 @@ owner/name@a1b2c3d4...         # explicit 40-hex commit SHA
 aimm hf-backup sync [OPTIONS] [REPOS]...
 ```
 
-Back up one or more repositories at a pinned commit.
+Back up one or more repositories at a pinned commit. Before transferring a repository,
+abandoned multipart uploads of that repository older than `--abort-stale` are aborted,
+so each run clears what a hard kill left behind. See
+[Operations](operations.md#orphaned-multipart-uploads).
 
 | Option | Type | Default | Environment |
 | --- | --- | --- | --- |
 | `--source` | `huggingface`\|`modelscope` | `huggingface` | `AIMM_SOURCE` |
+| `--abort-stale` | duration or `off` | `24h` | — |
 | `--repo-type` | `models`\|`datasets` | `models` | `AIMM_REPO_TYPE` |
 | `--revision` | text | `main` | — |
 | `--from-file` | path | — | — |

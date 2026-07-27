@@ -27,13 +27,14 @@ import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from bg_ai_model_management import shutdown
 from bg_ai_model_management.errors import (
+    AimmError,
     ChecksumMismatchError,
     ConfigError,
     IntegrityError,
@@ -100,6 +101,9 @@ class SyncRequest:
     recheck: RecheckMode = RecheckMode.head
     update_ref: bool = True
     dry_run: bool = False
+    #: Abort multipart uploads under this repository older than this before
+    #: transferring. None disables the sweep. See `Engine._sweep_stale_uploads`.
+    abort_stale_after: timedelta | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,6 +270,7 @@ class Engine:
             budget = DiskBudget.from_settings(transfer, _nearest_existing(self._staging_path()))
             return self._plan_report(pinned, files, budget, started)
 
+        self._sweep_stale_uploads(ref, req)
         staging_root = self._staging_root()
         budget = DiskBudget.from_settings(transfer, staging_root)
         tracker = StreamFailureTracker()
@@ -364,6 +369,37 @@ class Engine:
             manifest_key=None,
             duration_seconds=time.monotonic() - started,
         )
+
+    def _sweep_stale_uploads(self, ref: RepoRef, req: SyncRequest) -> None:
+        """Abort this repository's abandoned multipart uploads before transferring.
+
+        An upload orphaned by a hard kill occupies storage indefinitely and appears
+        in no object listing, so nothing else notices it. Every run therefore clears
+        the debris of the previous one, which is the only cleanup that happens on
+        its own — `prune --abort-older-than` needs an operator, and a bucket
+        lifecycle rule needs a bucket owner.
+
+        The age threshold is what makes this safe next to a concurrent run: an
+        upload lives only as long as ONE file transfer, so anything older by hours
+        is provably abandoned. It is scoped to this repository's key root, so two
+        catalogs under different prefixes never touch each other's uploads.
+
+        Never fails the backup. Listing multipart uploads is a separate S3
+        permission, and housekeeping that cannot run is a warning, not a reason to
+        stop mirroring.
+        """
+        if req.abort_stale_after is None:
+            return
+        prefix = keys.repo_root(self.settings.s3.prefix, ref.repo_type, ref.repo_id) + "/"
+        try:
+            aborted = self.destination.abort_stale_uploads(
+                prefix, req.abort_stale_after, now=datetime.now(UTC)
+            )
+        except AimmError as exc:
+            log.warning("could not sweep stale uploads under %s: %s", prefix, exc)
+            return
+        if aborted:
+            log.info("aborted %d stale multipart upload(s) under %s", aborted, prefix)
 
     def _transfer_one(
         self,

@@ -20,6 +20,7 @@ import dataclasses
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ from bg_ai_model_management.config.models import Settings
 from bg_ai_model_management.errors import (
     ChecksumMismatchError,
     ConfigError,
+    DestinationError,
     ManifestError,
     OperationCancelledError,
     SourceError,
@@ -1266,3 +1268,87 @@ def test_a_shutdown_signal_stops_files_from_being_downloaded(
 
     fetched = source.read_calls + source.stream_calls + source.staged_calls
     assert fetched == [], "no file may be fetched once shutdown was requested"
+
+
+# ── the stale-upload sweep: every run clears the previous run's debris ───────
+
+
+def open_stale_upload(destination: S3Destination, settings: Settings, repo_id: str) -> str:
+    """Leave a multipart upload open under `repo_id`, the way a hard kill does."""
+    key = keys.file_key(settings.s3.prefix, RepoType.models, repo_id, COMMIT, "abandoned.bin")
+    created = destination.client.create_multipart_upload(Bucket=settings.s3.bucket, Key=key)
+    return str(created["UploadId"])
+
+
+def open_upload_ids(destination: S3Destination, settings: Settings) -> set[str]:
+    response = destination.client.list_multipart_uploads(Bucket=settings.s3.bucket)
+    return {u["UploadId"] for u in response.get("Uploads", [])}
+
+
+def test_sync_aborts_an_abandoned_upload_of_the_same_repository(
+    engine: Engine, destination: S3Destination, settings: Settings
+) -> None:
+    """Orphans occupy storage forever and show up in no object listing."""
+    upload_id = open_stale_upload(destination, settings, "acme/model")
+    assert upload_id in open_upload_ids(destination, settings)
+
+    engine.sync(sync_request(abort_stale_after=timedelta(0)))
+
+    assert upload_id not in open_upload_ids(destination, settings)
+
+
+def test_the_sweep_is_scoped_to_the_repository_and_passes_the_threshold(
+    engine: Engine, settings: Settings
+) -> None:
+    """Scope and threshold are what make this safe beside a concurrent run.
+
+    The age semantics themselves live in `test_destination`, which injects `now` —
+    moto stamps every multipart upload with a fixed 2010 date, so under it every
+    upload looks ancient and no threshold can be observed here.
+    """
+    seen: list[tuple[str, timedelta]] = []
+
+    def spy(prefix: str, older_than: timedelta, *, now: object) -> int:
+        seen.append((prefix, older_than))
+        return 0
+
+    engine.destination.abort_stale_uploads = spy  # type: ignore[method-assign]
+    engine.sync(sync_request(abort_stale_after=timedelta(hours=24)))
+
+    assert seen == [(f"{settings.s3.prefix}/v1/models/acme/model/", timedelta(hours=24))]
+
+
+def test_the_sweep_is_off_unless_asked_for(
+    engine: Engine, destination: S3Destination, settings: Settings
+) -> None:
+    upload_id = open_stale_upload(destination, settings, "acme/model")
+
+    engine.sync(sync_request())
+
+    assert upload_id in open_upload_ids(destination, settings)
+
+
+def test_a_dry_run_never_aborts_anything(
+    engine: Engine, destination: S3Destination, settings: Settings
+) -> None:
+    """`--dry-run` promises to change nothing, and that includes housekeeping."""
+    upload_id = open_stale_upload(destination, settings, "acme/model")
+
+    engine.sync(sync_request(dry_run=True, abort_stale_after=timedelta(0)))
+
+    assert upload_id in open_upload_ids(destination, settings)
+
+
+def test_a_sweep_failure_does_not_fail_the_backup(
+    engine: Engine, destination: S3Destination, settings: Settings
+) -> None:
+    """Listing multipart uploads is a separate S3 permission; mirroring must go on."""
+
+    def refuse(*_args: object, **_kwargs: object) -> int:
+        raise DestinationError("ListMultipartUploads denied")
+
+    engine.destination.abort_stale_uploads = refuse  # type: ignore[method-assign]
+    report = engine.sync(sync_request(abort_stale_after=timedelta(0)))
+
+    assert report.ok
+    assert report.repos[0].files_transferred > 0

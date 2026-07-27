@@ -20,6 +20,7 @@ import json
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -1198,3 +1199,39 @@ def test_doctor_reports_disabled_tls_verification_in_its_check_row(
     store = next(check for check in document["checks"] if check["name"] == "object store")
     assert "tls_verification=DISABLED" in store["detail"]
     assert exit_code in (EXIT_OK, EXIT_CONFIG)  # the Hub check may fail; TLS is the assertion
+
+
+# ── --abort-stale ────────────────────────────────────────────────────────────
+
+
+def test_sync_sweeps_stale_uploads_by_default(
+    wired_hub: FakeSource, wired_cli: S3Destination, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every run clears the previous run's debris without anyone asking for it."""
+    seen: list[object] = []
+    original = S3Destination.abort_stale_uploads
+
+    def spy(self: S3Destination, prefix: str, older_than: object, *, now: object) -> int:
+        seen.append(older_than)
+        return 0
+
+    monkeypatch.setattr(S3Destination, "abort_stale_uploads", spy)
+    try:
+        assert run("sync", "acme/model") == 0
+    finally:
+        monkeypatch.setattr(S3Destination, "abort_stale_uploads", original)
+    assert seen == [timedelta(hours=24)]
+
+
+def test_abort_stale_off_disables_the_sweep(
+    wired_hub: FakeSource, wired_cli: S3Destination, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[object] = []
+
+    def spy(self: S3Destination, prefix: str, older_than: object, *, now: object) -> int:
+        called.append(older_than)
+        return 0
+
+    monkeypatch.setattr(S3Destination, "abort_stale_uploads", spy)
+    assert run("sync", "acme/model", "--abort-stale", "off") == 0
+    assert called == []

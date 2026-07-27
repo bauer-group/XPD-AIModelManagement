@@ -186,8 +186,20 @@ Two operational consequences:
   marker, so the next run re-plans that repository from scratch rather than trusting a
   half-written record. Already-uploaded objects are re-uploaded; nothing is corrupted.
 
-A bucket lifecycle rule (`AbortIncompleteMultipartUpload`, e.g. 7 days) is still worth
-having as a backstop for the case this cannot cover: SIGKILL, an OOM kill, or a power cut.
+**Every sync also sweeps before it transfers.** `sync` aborts abandoned uploads of the
+repository it is about to write that are older than `--abort-stale` (default `24h`), so a
+run clears the debris of the previous one without anyone remembering to. `--abort-stale
+off` disables it. The threshold is what makes this safe next to a concurrent run: an
+upload lives only as long as ONE file transfer, so anything older by hours is provably
+abandoned. The sweep is scoped to that repository's key root, so two catalogs under
+different prefixes never touch each other's uploads, and a failure to list uploads is a
+warning rather than a failed backup — listing is a separate S3 permission.
+
+What it cannot cover is a repository that is no longer in the run at all: nothing sweeps a
+model you removed from the catalog. A bucket lifecycle rule
+(`AbortIncompleteMultipartUpload`, e.g. 7 days) is therefore still worth having, and it is
+also the only backstop that works when the tool never runs again — after a SIGKILL, an OOM
+kill, or a power cut.
 
 ## Disaster recovery
 
