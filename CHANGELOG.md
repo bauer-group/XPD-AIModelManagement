@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v1.2.1 (2026-07-27)
+
+### Bug Fixes
+
+- **modelscope**: Fixed a deleted repo reported as a missing file
+  ([`fd8ad96`](https://github.com/bauer-group/XPD-AIModelManagement/commit/fd8ad96187f9a2c843617536fb74d5dbe54e4ca9))
+
+### Documentation
+
+- Update README.MD [automated]
+  ([`31aeff8`](https://github.com/bauer-group/XPD-AIModelManagement/commit/31aeff8b453919ffcbfbd05ccf11a97f853fa58d))
+
+
 ## v1.2.0 (2026-07-27)
 
 ### Documentation
