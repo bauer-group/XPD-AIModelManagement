@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v1.2.0 (2026-07-27)
+
+### Documentation
+
+- Update README.MD [automated]
+  ([`aefba3c`](https://github.com/bauer-group/XPD-AIModelManagement/commit/aefba3c7b8a5650c52b8d74099592f1fbac25925))
+
+### Features
+
+- **sync**: Added a stale multipart upload sweep
+  ([`5489ca0`](https://github.com/bauer-group/XPD-AIModelManagement/commit/5489ca00ccf86ae7b7ded553bc47aae9d5be0aff))
+
+
 ## v1.1.1 (2026-07-27)
 
 ### Bug Fixes
