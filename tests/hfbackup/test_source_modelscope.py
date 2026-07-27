@@ -20,6 +20,7 @@ from bg_ai_model_management.config.models import ModelScopeSettings
 from bg_ai_model_management.errors import (
     AuthError,
     ConfigError,
+    FileNotInRepoError,
     OperationCancelledError,
     RepoNotFoundError,
     RevisionNotFoundError,
@@ -221,6 +222,29 @@ def test_an_unrecognised_envelope_code_becomes_a_source_error() -> None:
     body = {"Code": 500, "Message": "boom", "Success": False}
     with pytest.raises(SourceError):
         source_for(lambda _r: httpx.Response(200, json=body)).list_files(pinned())
+
+
+def test_a_404_while_resolving_a_ref_is_a_missing_repository() -> None:
+    """A deleted model must not be reported as a missing file inside a live repo."""
+    with pytest.raises(RepoNotFoundError):
+        source_for(lambda _r: httpx.Response(404)).pin(ref())
+
+
+def test_a_404_while_listing_is_a_missing_repository() -> None:
+    with pytest.raises(RepoNotFoundError):
+        source_for(lambda _r: httpx.Response(404)).list_files(pinned())
+
+
+def test_a_404_during_a_transfer_is_still_a_missing_file() -> None:
+    """There the repository is known to exist, so the file is what is gone."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404) if "/resolve/" in request.url.path else route(request)
+
+    source = source_for(handler)
+    file = source.list_files(pinned())[0]
+    with pytest.raises(FileNotInRepoError):
+        source.read_bytes(pinned(), file)
 
 
 def test_an_auth_status_becomes_an_auth_error() -> None:

@@ -79,7 +79,9 @@ def is_commit_sha(value: str) -> bool:
 
 
 @contextmanager
-def _translated(context: str) -> Iterator[None]:
+def _translated(
+    context: str, *, missing: type[errors.AimmError] = errors.FileNotInRepoError
+) -> Iterator[None]:
     """Translate ModelScope and httpx failures into aimm's typed errors.
 
     Clause order matters: `httpx.HTTPStatusError` derives from `httpx.HTTPError`, so the
@@ -88,6 +90,11 @@ def _translated(context: str) -> Iterator[None]:
 
     Args:
         context: Short description of the operation. Must never contain a token.
+        missing: What a 404 means here. Resolving a ref or listing a tree hits the
+            repository itself, so a 404 there is a missing REPOSITORY; during a
+            transfer the repository is known to exist and a 404 is a missing file.
+            Getting this wrong tells an operator a file vanished when in truth the
+            whole model was deleted upstream.
 
     Raises:
         RepoNotFoundError, AuthError, FileNotInRepoError, SourceError: depending on the
@@ -108,7 +115,7 @@ def _translated(context: str) -> Iterator[None]:
                 f"{context}: ModelScope rejected the credentials (HTTP {status})."
             ) from exc
         if status == 404:
-            raise errors.FileNotInRepoError(f"{context}: not found (HTTP 404).") from exc
+            raise missing(f"{context}: not found (HTTP 404).") from exc
         raise errors.SourceError(f"{context}: ModelScope error (HTTP {status}).") from exc
     except (httpx.TimeoutException, httpx.TransportError) as exc:
         raise errors.SourceError(
@@ -178,7 +185,7 @@ class ModelScopeSource:
         if is_commit_sha(ref.revision):
             return self._pinned(ref, ref.revision)
 
-        with _translated(context):
+        with _translated(context, missing=errors.RepoNotFoundError):
             refs = call_with_retry(lambda: self._remote_refs(ref.repo_id))
         for candidate in (
             f"refs/heads/{ref.revision}",
@@ -205,7 +212,7 @@ class ModelScopeSource:
             RepoNotFoundError, AuthError, SourceError: on any ModelScope failure.
         """
         context = f"list {pinned.repo_id}@{pinned.commit_sha}"
-        with _translated(context):
+        with _translated(context, missing=errors.RepoNotFoundError):
             entries = call_with_retry(
                 lambda: self._get_json(
                     f"/api/v1/models/{pinned.repo_id}/repo/files",
