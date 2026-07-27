@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from botocore.exceptions import ClientError, ReadTimeoutError
 
+from bg_ai_model_management import shutdown
 from bg_ai_model_management.config.models import S3Settings, Settings
 from bg_ai_model_management.errors import (
     AuthError,
@@ -31,6 +32,7 @@ from bg_ai_model_management.errors import (
     DestinationError,
     ObjectNotFoundError,
     ObjectTooLargeError,
+    OperationCancelledError,
     SizeMismatchError,
     UploadFailedError,
 )
@@ -185,6 +187,55 @@ def test_abort_on_complete_multipart_upload_failure(
             "aimm/f.bin", ChunkReader(payload), size=len(payload), part_size=PART
         )
     assert_aborted(spy, "aimm/f.bin")
+
+
+def test_abort_when_shutdown_is_requested_mid_upload(
+    spy_destination: tuple[S3Destination, SpyClient],
+) -> None:
+    """A SIGTERM during a multi-hour upload must not orphan the multipart upload.
+
+    Orphaned parts keep occupying storage, are billed, and do not appear in an
+    ordinary bucket listing — the failure mode this poll exists to prevent.
+    """
+    destination, spy = spy_destination
+    payload = b"z" * (PART * 3)
+
+    def request_shutdown_after_the_first_part(index: int, _kwargs: dict[str, Any]) -> None:
+        if index == 0:
+            shutdown.request()
+        return None
+
+    spy.faults["upload_part"] = request_shutdown_after_the_first_part
+    try:
+        with pytest.raises(OperationCancelledError):
+            destination.upload_multipart(
+                "aimm/big.bin", ChunkReader(payload), size=len(payload), part_size=PART
+            )
+    finally:
+        shutdown.reset()
+
+    assert_aborted(spy, "aimm/big.bin")
+    assert len(spy.params("upload_part")) == 1, "no further part may start after the signal"
+
+
+def test_a_shutdown_signal_stops_an_upload_before_it_opens(
+    spy_destination: tuple[S3Destination, SpyClient],
+) -> None:
+    """Requested before the first part: nothing is created, so nothing needs aborting."""
+    destination, spy = spy_destination
+    payload = b"z" * PART
+
+    shutdown.request()
+    try:
+        with pytest.raises(OperationCancelledError):
+            destination.upload_multipart(
+                "aimm/none.bin", ChunkReader(payload), size=len(payload), part_size=PART
+            )
+    finally:
+        shutdown.reset()
+
+    assert spy.params("upload_part") == []
+    assert_aborted(spy, "aimm/none.bin")
 
 
 def test_abort_when_the_reader_itself_fails(

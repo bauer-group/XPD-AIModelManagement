@@ -44,6 +44,7 @@ from ...errors import (
 )
 from ...integrity.hashing import sha256_b64, sha256_bytes
 from ...net.retry import call_with_retry, is_retryable
+from ...shutdown import raise_if_requested
 from . import keys
 from .types import BackendCapabilities, ByteReader, ObjectHead, ObjectSummary, UploadResult
 
@@ -542,6 +543,11 @@ class S3Destination:
         total = 0
         try:
             while len(parts) < expected_parts:
+                # A part boundary is the only safe place to stop: the abort below then
+                # unwinds a whole upload instead of a half-written body. Uploads run on
+                # worker threads, which a signal never reaches, so this poll is the only
+                # way a SIGTERM can end them — see bg_ai_model_management.shutdown.
+                raise_if_requested(f"upload of {key}")
                 chunk = _read_exactly(reader, part_size)
                 if not chunk and parts:
                     break

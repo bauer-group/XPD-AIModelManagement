@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+EXIT_OK = 0
+EXIT_UNEXPECTED = 1
+EXIT_INTERRUPTED = 130
+
 
 class AimmError(Exception):
     """Base class for every error raised by aimm library code."""
@@ -111,6 +115,12 @@ class DriftDetectedError(AimmError):
     exit_code = 20
 
 
-EXIT_OK = 0
-EXIT_UNEXPECTED = 1
-EXIT_INTERRUPTED = 130
+class OperationCancelledError(AimmError):
+    """A shutdown signal arrived and the operation stopped on purpose.
+
+    Not a failure of the work: it shares the exit code of a Ctrl-C so scripts can
+    tell "the operator stopped this" from "this broke". Raised by
+    :mod:`bg_ai_model_management.shutdown`.
+    """
+
+    exit_code = EXIT_INTERRUPTED

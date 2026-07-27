@@ -35,6 +35,7 @@ EXIT_CODES: list[tuple[type[AimmError], int]] = [
     (errors.ObjectTooLargeError, 8),
     (errors.RetentionRefusedError, 9),
     (errors.DriftDetectedError, 20),
+    (errors.OperationCancelledError, 130),
 ]
 
 

@@ -170,6 +170,25 @@ Multipart uploads abandoned by a crash consume storage indefinitely and appear i
 listing, so they are invisible until the storage bill or the capacity alarm arrives. Every
 normal failure path aborts its own upload; this sweeps up what a hard kill left behind.
 
+**A container stop is no longer a hard kill.** `docker stop`, systemd and Kubernetes all
+terminate with SIGTERM, whose default disposition kills the interpreter without unwinding —
+no `finally`, and therefore no abort. `aimm` installs a cooperative handler instead: the
+first signal asks every worker to stop at its next part boundary, each in-flight upload is
+aborted properly, no manifest is written, and the process exits `130`. A **second** signal
+hands back to the default disposition and terminates immediately.
+
+Two operational consequences:
+
+* Give the container a grace period long enough to finish the current parts —
+  `stop_grace_period: 30s` is usually plenty, since only the parts in flight have to end,
+  not the file.
+* A cancelled repository stays incomplete on purpose. The manifest is the completeness
+  marker, so the next run re-plans that repository from scratch rather than trusting a
+  half-written record. Already-uploaded objects are re-uploaded; nothing is corrupted.
+
+A bucket lifecycle rule (`AbortIncompleteMultipartUpload`, e.g. 7 days) is still worth
+having as a backstop for the case this cannot cover: SIGKILL, an OOM kill, or a power cut.
+
 ## Disaster recovery
 
 ### Restore a specific revision

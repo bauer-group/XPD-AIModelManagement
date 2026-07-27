@@ -14,8 +14,15 @@ from collections.abc import MutableMapping, Sequence
 
 import typer
 
+from bg_ai_model_management import shutdown
 from bg_ai_model_management.cli import build_app, load_tools
-from bg_ai_model_management.errors import EXIT_INTERRUPTED, EXIT_OK, EXIT_UNEXPECTED, AimmError
+from bg_ai_model_management.errors import (
+    EXIT_INTERRUPTED,
+    EXIT_OK,
+    EXIT_UNEXPECTED,
+    AimmError,
+    OperationCancelledError,
+)
 from bg_ai_model_management.logging_setup import configure_logging
 
 HF_ENV_DEFAULTS: dict[str, str] = {
@@ -56,6 +63,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     """
     seed_hf_env()
     configure_logging()  # bootstrap; the root callback reconfigures from the parsed flags
+    # SIGTERM's default disposition would kill the interpreter without unwinding, so
+    # in-flight multipart uploads would never be aborted. See the module docstring.
+    shutdown.install_handlers()
 
     app = build_app()
     load_tools(app)
@@ -66,6 +76,11 @@ def run(argv: Sequence[str] | None = None) -> int:
     except (KeyboardInterrupt, typer.Abort):
         log.error("interrupted")
         return EXIT_INTERRUPTED
+    except OperationCancelledError as exc:
+        # Same exit code as Ctrl-C, and deliberately not the AimmError branch below:
+        # a signalled stop is an operator decision, not a failure of the work.
+        log.error("interrupted: %s", exc)
+        return exc.exit_code
     except typer.Exit as exc:
         # typer.Exit/Abort are the classes typer actually raises; on a typer build that
         # vendors click they are NOT click.exceptions.Exit/Abort, so catch these.
