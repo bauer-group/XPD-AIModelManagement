@@ -4,7 +4,8 @@
 swiss-army knife: a tool-agnostic core plus tools that mount on top of it, so tool #2 costs
 a subpackage and one line of packaging metadata rather than a new project.
 
-Tool #1 is `aimm hf-backup` — Hugging Face repositories into S3-compatible storage, with
+Tool #1 is `aimm hf-backup` — Hugging Face **or ModelScope** repositories into
+S3-compatible storage, with
 verification, restore and retention.
 
 ## The three names
@@ -26,8 +27,8 @@ filenames `aimm.yaml` / `aimm.yml`, and the default S3 key prefix `aimm`.
 - **Completeness is structural.** `manifest.json` is written only when every file
   succeeded. Its presence *is* the completeness marker; there is no status database to go
   stale.
-- **Integrity is provable.** Digests are compared against Hugging Face's own values where
-  Hugging Face publishes them, and the limits of that are stated plainly in
+- **Integrity is provable.** Digests are compared against the hub's own values where the
+  hub publishes them, and the limits of that are stated plainly in
   [Integrity](integrity.md).
 - **Restore is self-contained.** `restore` and `verify --level quick|deep` never contact
   Hugging Face.

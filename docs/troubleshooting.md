@@ -24,7 +24,7 @@ aimm --log-level DEBUG hf-backup sync owner/name
 | `1` | unexpected internal error | a bug — please report it with the `run_id` |
 | `2` | usage or configuration error | bad flag, missing bucket, invalid profile, unknown key |
 | `3` | authentication or authorisation | wrong or missing credentials, insufficient IAM policy |
-| `4` | Hugging Face source error | repository missing, gated, revision not found |
+| `4` | upstream source error (Hugging Face or ModelScope) | repository missing, gated, revision not found |
 | `5` | object store error | bucket missing, endpoint unreachable, TLS failure |
 | `6` | **integrity failure** | stored bytes do not match the manifest |
 | `7` | insufficient disk space | staging budget cannot hold the file |
@@ -91,6 +91,13 @@ policy grants the actions in [Backends](backends.md#least-privilege-iam-policy).
 For Hugging Face, `doctor` reports whether the session is authenticated. Public repositories
 work anonymously but at much lower rate limits; set `HF_TOKEN` (no `AIMM_` prefix).
 
+For ModelScope, `doctor --source modelscope` reports that the endpoint answers and whether
+a token is configured. It never claims a user name: public repositories need no credential,
+and `MODELSCOPE_API_TOKEN` (no `AIMM_` prefix) is only for private ones.
+
+**`--revision main` fails on ModelScope.** Its repositories conventionally use `master`;
+the error lists the refs that do exist.
+
 ### Exit `4` — repository is gated
 
 The repository exists but requires accepting its licence first. Accept it on the Hugging
@@ -120,7 +127,7 @@ Something concrete is wrong:
 | Finding kind | Meaning | Action |
 | --- | --- | --- |
 | `sha256` | a stored object does not hash to the manifest value | re-run `sync` for that revision; the object will be replaced |
-| `upstream` | the manifest disagrees with Hugging Face at the pinned SHA | the manifest may be corrupt; re-sync the revision |
+| `upstream` | the manifest disagrees with the hub at the pinned SHA | the manifest may be corrupt; re-sync the revision |
 | manifest digest | `manifest.json` fails `manifest.json.sha256` | the manifest is corrupt; re-sync the revision |
 
 Since keys include the commit SHA, re-syncing writes the same keys and repairs in place.

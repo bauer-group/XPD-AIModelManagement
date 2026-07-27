@@ -38,7 +38,10 @@ class ManifestFileEntry(BaseModel):
     key: str
     size: int
     sha256: str
-    sha256_source: Literal["hf-lfs", "computed"]
+    #: Which hub attested this digest, or "computed" when only this tool hashed the
+    #: bytes. "hf-lfs" is Hugging Face LFS metadata; "modelscope" is ModelScope's
+    #: per-file Sha256, which it publishes for every file, LFS or not.
+    sha256_source: Literal["hf-lfs", "modelscope", "computed"]
     blob_id: str
     xet_hash: str | None = None
     lfs: bool
@@ -158,6 +161,19 @@ def verify_digest(data: bytes, line: str) -> None:
         )
 
 
+def _sha256_source(value: str) -> Literal["hf-lfs", "modelscope", "computed"]:
+    """Narrow a source label to the manifest's vocabulary.
+
+    Anything unrecognised becomes "computed": claiming a provenance that was never
+    established is worse than under-claiming one that was.
+    """
+    if value == "hf-lfs":
+        return "hf-lfs"
+    if value == "modelscope":
+        return "modelscope"
+    return "computed"
+
+
 def build_manifest(
     *,
     pinned: PinnedRepo,
@@ -184,7 +200,7 @@ def build_manifest(
             key=result.key,
             size=result.size,
             sha256=result.sha256,
-            sha256_source="hf-lfs" if result.sha256_source == "hf-lfs" else "computed",
+            sha256_source=_sha256_source(result.sha256_source),
             blob_id=result.blob_id,
             xet_hash=result.xet_hash,
             lfs=result.is_lfs,

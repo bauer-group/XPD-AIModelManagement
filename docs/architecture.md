@@ -63,7 +63,7 @@ graph TD
 
   subgraph tool1["bg_ai_model_management.tools.hfbackup — tool #1"]
     tcli["cli.py<br/>sync/verify/restore/prune/catalog/doctor"]
-    src["source.py<br/>pin, enumerate, open stream, download"]
+    src["source.py / source_modelscope.py<br/>Source protocol: pin, enumerate, stream, download"]
     dst["destination.py<br/>hand-rolled MPU, probe, list, delete"]
     keys["keys.py<br/>S3 key layout + path safety"]
     man["manifest.py<br/>manifest model, read/write, digest"]
@@ -111,7 +111,8 @@ graph TD
 | `bg_ai_model_management/net/retry.py` | Narrow retry classification on top of tenacity; `reraise=True`; injectable `sleep`. |
 | `bg_ai_model_management/integrity/hashing.py` | Streamed sha256 (1 MiB chunks), git blob id, composite-ETag recomputation. |
 | `bg_ai_model_management/tools/hfbackup/cli.py` | Typer sub-app: parse flags, build settings, call the engine, render the report. |
-| `bg_ai_model_management/tools/hfbackup/source.py` | Pin the revision, enumerate the file tree, open a byte stream, download to disk. |
+| `bg_ai_model_management/tools/hfbackup/source.py` | The `Source` implementation for Hugging Face: pin the revision, enumerate the file tree, open a byte stream, download to disk. |
+| `bg_ai_model_management/tools/hfbackup/source_modelscope.py` | The same contract for ModelScope: git smart-HTTP for refs, REST for the tree, `/resolve/` for bytes. |
 | `bg_ai_model_management/tools/hfbackup/destination.py` | One shared S3 client; hand-rolled multipart upload; verification; listing; deletion. |
 | `bg_ai_model_management/tools/hfbackup/keys.py` | Deterministic S3 key layout and path-safety checks. |
 | `bg_ai_model_management/tools/hfbackup/manifest.py` | Manifest schema, serialisation, digest file, completeness invariant. |
@@ -166,7 +167,7 @@ sequenceDiagram
   autonumber
   participant CLI as hfbackup/cli.py
   participant EN as engine.py
-  participant SRC as source.py (HF)
+  participant SRC as source (HF or ModelScope)
   participant PL as planner.py
   participant DST as destination.py (S3)
   participant MAN as manifest.py

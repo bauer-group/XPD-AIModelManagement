@@ -6,7 +6,7 @@
 | --- | --- |
 | Python | 3.12, 3.13 or 3.14 |
 | Operating system | Linux, macOS, Windows |
-| Network | outbound HTTPS to the Hugging Face endpoint and to your object store |
+| Network | outbound HTTPS to the upstream hub (huggingface.co and/or modelscope.cn) and to your object store |
 | Disk | only for the `disk` transfer path; see [Transfer strategy](transfer-strategy.md) |
 
 Python 3.12 is the floor and it is also what the project lints and type-checks against, so
@@ -50,7 +50,7 @@ aimm tools
 `aimm tools` lists the mounted tools and should print at least:
 
 ```text
-hf-backup  Back up Hugging Face repos to S3-compatible storage.
+hf-backup  Back up Hugging Face or ModelScope repos to S3-compatible storage.
 ```
 
 If `hf-backup` is missing, the entry point did not load. Run with

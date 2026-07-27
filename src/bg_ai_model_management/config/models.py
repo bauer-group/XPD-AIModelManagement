@@ -233,6 +233,31 @@ class HubSettings(BaseModel):
         return _coerce_size(value)
 
 
+class ModelScopeSettings(BaseModel):
+    """ModelScope (modelscope.cn) endpoint and credentials.
+
+    Separate from :class:`HubSettings` on purpose: the two hubs have independent
+    credentials, and an ``HF_TOKEN`` must never be sent to modelscope.cn (nor the
+    reverse). Public ModelScope repositories need no token at all.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint: str = "https://modelscope.cn"
+    token: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("token", "MODELSCOPE_API_TOKEN"),
+    )
+    chunk_size: int = 1 << 20
+    connect_timeout: float = Field(default=15.0, gt=0)
+    read_timeout: float = Field(default=120.0, gt=0)
+
+    @field_validator("chunk_size", mode="before")
+    @classmethod
+    def _parse_chunk_size(cls, value: Any) -> Any:
+        return _coerce_size(value)
+
+
 class Settings(BaseSettings):
     """Root settings document. Built by ``bg_ai_model_management.config.loader.load_settings``."""
 
@@ -247,5 +272,6 @@ class Settings(BaseSettings):
     s3: S3Settings
     transfer: TransferSettings = TransferSettings()
     hub: HubSettings = HubSettings()
+    modelscope: ModelScopeSettings = ModelScopeSettings()
     log_level: str = "INFO"
     log_format: str = "text"

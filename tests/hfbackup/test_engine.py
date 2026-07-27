@@ -24,11 +24,13 @@ from pathlib import Path
 
 import pytest
 
+from bg_ai_model_management import shutdown
 from bg_ai_model_management.config.models import Settings
 from bg_ai_model_management.errors import (
     ChecksumMismatchError,
     ConfigError,
     ManifestError,
+    OperationCancelledError,
     SourceError,
     TransferError,
 )
@@ -51,6 +53,7 @@ from bg_ai_model_management.tools.hfbackup.types import (
     RepoRef,
     RepoType,
     SourceFile,
+    SourceKind,
     TransferMode,
     VerifyLevel,
     VerifyStatus,
@@ -72,6 +75,9 @@ class FakeSource:
     Every Hub interaction is recorded, because most assertions in this module are about
     how *often* the Hub was touched rather than what it returned.
     """
+
+    #: Part of the `Source` protocol: it selects the manifest's digest provenance.
+    kind = SourceKind.huggingface
 
     def __init__(self, blobs: dict[str, bytes], *, lfs: set[str] | None = None) -> None:
         self.blobs = dict(blobs)
@@ -1223,3 +1229,40 @@ def test_an_lfs_file_without_an_upstream_sha256_is_recorded_as_computed(
     entry = document.index()["config.json"]
     assert entry.lfs is True
     assert entry.sha256_source == "computed"
+
+
+# ── shutdown: a signalled stop is not a completed revision ───────────────────
+
+
+def test_a_shutdown_signal_stops_the_sync_and_writes_no_manifest(
+    engine: Engine, destination: S3Destination, settings: Settings
+) -> None:
+    """A container stopped mid-sync must leave the revision visibly incomplete.
+
+    The manifest is the only completeness marker, so writing one for a run that was
+    cut short would permanently label a torn revision as good.
+    """
+    shutdown.request()
+    try:
+        with pytest.raises(OperationCancelledError):
+            engine.sync(sync_request())
+    finally:
+        shutdown.reset()
+
+    stored = {summary.key for summary in destination.list_keys(settings.s3.prefix)}
+    assert not any(key.endswith("manifest.json") for key in stored)
+
+
+def test_a_shutdown_signal_stops_files_from_being_downloaded(
+    engine: Engine, source: FakeSource
+) -> None:
+    """Queued work must not start a fresh Hub download after the signal arrived."""
+    shutdown.request()
+    try:
+        with pytest.raises(OperationCancelledError):
+            engine.sync(sync_request())
+    finally:
+        shutdown.reset()
+
+    fetched = source.read_calls + source.stream_calls + source.staged_calls
+    assert fetched == [], "no file may be fetched once shutdown was requested"

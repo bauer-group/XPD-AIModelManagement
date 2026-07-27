@@ -183,6 +183,29 @@ same `AIMM_S3__*` pattern and default to `10`, `15.0`, `120.0` and unset.
 `transfer.stream_failure_downgrade`, `transfer.max_attempts`, `transfer.max_wait` and
 `transfer.fail_fast` follow the same pattern and default to `2`, `5`, `60.0` and `false`.
 
+### Choosing the upstream hub
+
+| Variable | Maps to | Default |
+| --- | --- | --- |
+| `AIMM_SOURCE` | the `--source` flag on `sync`, `verify` and `doctor` | `huggingface` |
+
+`huggingface` mirrors huggingface.co; `modelscope` mirrors modelscope.cn. See
+[Sources](sources.md) for what differs between them.
+
+### ModelScope
+
+| Variable | Maps to | Default |
+| --- | --- | --- |
+| `AIMM_MODELSCOPE__ENDPOINT` | `modelscope.endpoint` | `https://modelscope.cn` |
+| `AIMM_MODELSCOPE__CHUNK_SIZE` | `modelscope.chunk_size` | `1MiB` |
+| `AIMM_MODELSCOPE__CONNECT_TIMEOUT` | `modelscope.connect_timeout` | `15.0` seconds |
+| `AIMM_MODELSCOPE__READ_TIMEOUT` | `modelscope.read_timeout` | `120.0` seconds |
+| `MODELSCOPE_API_TOKEN` | `modelscope.token` — **no `AIMM_` prefix** | unset |
+
+Public ModelScope repositories need no token at all. The two hubs keep separate
+credentials on purpose: an `HF_TOKEN` is never sent to modelscope.cn, and a
+`MODELSCOPE_API_TOKEN` is never sent to huggingface.co.
+
 ### Hugging Face
 
 | Variable | Maps to | Default |

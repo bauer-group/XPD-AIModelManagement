@@ -81,6 +81,7 @@ Back up one or more repositories at a pinned commit.
 
 | Option | Type | Default | Environment |
 | --- | --- | --- | --- |
+| `--source` | `huggingface`\|`modelscope` | `huggingface` | `AIMM_SOURCE` |
 | `--repo-type` | `models`\|`datasets` | `models` | `AIMM_REPO_TYPE` |
 | `--revision` | text | `main` | — |
 | `--from-file` | path | — | — |
@@ -139,6 +140,7 @@ Check a stored revision against its manifest.
 
 | Option | Type | Default |
 | --- | --- | --- |
+| `--source` | `huggingface`\|`modelscope` | `huggingface` |
 | `--repo-type` | `models`\|`datasets` | `models` |
 | `--revision` | text — ref name or 40-hex SHA | `main` |
 | `--level` | `quick`\|`deep`\|`upstream` | `quick` |
@@ -323,14 +325,15 @@ aimm hf-backup catalog show meta-llama/Llama-3-8B --revision v1.0 --json
 aimm hf-backup doctor [OPTIONS]
 ```
 
-Takes only the [shared backend options](#shared-backend-options). Runs four checks and
-prints the resolved settings with every secret masked:
+Takes the [shared backend options](#shared-backend-options) plus `--source`
+(`huggingface` by default, `AIMM_SOURCE`). Runs four checks and prints the resolved
+settings with every secret masked:
 
 | Check | What it reports |
 | --- | --- |
 | settings | which profile was used, if any |
 | object store | bucket reachable; probed addressing, checksum mode, sha256 and `GetObjectAttributes` support |
-| hugging face | the authenticated user, or that the session is anonymous |
+| hugging face *or* modelscope | Hugging Face: the authenticated user, or that the session is anonymous. ModelScope: that the endpoint answers and whether a token is configured — it never claims an identity |
 | staging dir | writable, and how much free space is available |
 
 Every check is reported even when an earlier one failed; the command then exits `2` if any
@@ -344,14 +347,14 @@ check failed. This is the output to attach to a bug report.
 | `1` | unexpected internal error |
 | `2` | usage or configuration error |
 | `3` | authentication or authorisation failure |
-| `4` | Hugging Face source error |
+| `4` | upstream source error (Hugging Face or ModelScope) |
 | `5` | object store error |
 | `6` | **integrity failure** |
 | `7` | insufficient disk space for staging |
 | `8` | transfer failed after retries |
 | `9` | retention refused by a safety guard |
 | `20` | **differences found — a finding, not a crash** |
-| `130` | interrupted (SIGINT) |
+| `130` | interrupted — Ctrl-C, or SIGTERM from a container stop; in-flight uploads are aborted first |
 
 Full diagnosis per code: [Troubleshooting](troubleshooting.md).
 

@@ -6,6 +6,9 @@ authority stops.
 
 ## The split: sha256 for LFS, git blob id for the rest
 
+This section describes **Hugging Face**, whose anchors are not uniform. ModelScope is
+simpler and is covered in [On ModelScope](#on-modelscope) below.
+
 Hugging Face does not publish one uniform content hash. What it publishes depends on how
 git stores the file:
 
@@ -55,7 +58,7 @@ checksum was **confirmed by Hugging Face** or merely **observed by us**:
 | Manifest field | Meaning |
 | --- | --- |
 | `sha256` | the digest `aimm` computed while transferring |
-| `sha256_source` | `hf-lfs` if it was confirmed against Hugging Face's value, `computed` if not |
+| `sha256_source` | which hub attested the digest — `hf-lfs`, `modelscope` — or `computed` when nothing upstream did |
 | `blob_id` | the git blob id, recomputed and checked for non-LFS files |
 | `xet_hash` | Hugging Face's Xet content hash, when present |
 | `lfs` | whether the file is LFS-backed |
@@ -71,11 +74,28 @@ is an end-to-end proof and the other is not.
 | --- | --- | --- |
 | Origin, LFS | computed sha256 == `lfs.sha256` | Hugging Face |
 | Origin, non-LFS | recomputed blob id == `blob_id` | Hugging Face |
+| Origin, any file | computed sha256 == the listed `Sha256` | ModelScope |
 | Transport | `head_object` `ContentLength` == expected size, after **every** upload | S3 |
 | At rest | `sha256(GET object)` == `manifest.sha256` | the manifest |
 
 The transport check is what makes a truncated upload fail at backup time rather than years
 later at restore time.
+
+## On ModelScope
+
+ModelScope publishes a **content sha256 for every file**, LFS or not, and publishes no git
+blob id at all — the mirror image of Hugging Face. Every file is therefore anchored on
+SHA-256 attested by the hub, and the SHA-1 caveat above simply does not arise.
+
+Mechanically this is expressed by reporting every ModelScope file with `is_lfs=True`. That
+flag does not describe a storage technology here; it selects which anchor the engine uses —
+sha256 when set, git blob id otherwise. Reporting `is_lfs=False` would send verification to
+a blob id that does not exist, and every plain text file in every repository would fail its
+check.
+
+The manifest records the difference honestly: `sha256_source` is `modelscope`, never
+`hf-lfs`, so a later reader can tell which hub vouched for the digest. Manifests written
+before ModelScope support keep their `hf-lfs` labels and remain valid.
 
 ## Why the ETag is not enough
 

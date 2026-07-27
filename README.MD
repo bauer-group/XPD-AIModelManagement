@@ -15,8 +15,10 @@ a single script: one core provides configuration precedence, secret redaction, r
 classification, hashing and a stable exit-code contract, and each tool mounts on top of it
 as a Typer sub-app.
 
-Tool #1 is **`aimm hf-backup`**: it backs up Hugging Face repositories to S3-compatible
-storage and can prove afterwards that the bytes are still the right bytes.
+Tool #1 is **`aimm hf-backup`**: it backs up repositories from **Hugging Face or
+ModelScope** to S3-compatible storage and can prove afterwards that the bytes are still
+the right bytes. Pick the hub with `--source`; everything after the download — pinning,
+integrity, the key layout, `verify`, `restore`, `prune` — is identical for both.
 
 ## The three names
 

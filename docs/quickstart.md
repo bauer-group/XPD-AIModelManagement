@@ -59,7 +59,8 @@ reads it under its real name.
 aimm hf-backup doctor --preset minio --ensure-bucket
 ```
 
-`doctor` probes the object store, checks Hugging Face authentication, checks that the
+`doctor` probes the object store, checks the upstream hub (`--source`, Hugging Face by
+default), checks that the
 staging directory is writable and how much space it has, and prints the fully resolved
 settings **with every secret masked**. This is the output to paste into a bug report.
 

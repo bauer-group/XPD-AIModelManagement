@@ -54,7 +54,7 @@ from bg_ai_model_management import errors
 from bg_ai_model_management.net.retry import call_with_retry
 
 from . import keys
-from .types import HF_REPO_TYPE, PinnedRepo, RepoRef, SourceFile
+from .types import HF_REPO_TYPE, PinnedRepo, RepoRef, SourceFile, SourceKind
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle avoidance, types only
     from bg_ai_model_management.config.models import HubSettings
@@ -130,6 +130,8 @@ def _translated(context: str) -> Iterator[None]:
 
 class HubSource:
     """Read-only access to a Hugging Face repository, pinned to a commit."""
+
+    kind = SourceKind.huggingface
 
     def __init__(self, settings: HubSettings, *, api: HfApi | None = None) -> None:
         """Build an ``HfApi`` bound to the configured endpoint and token.

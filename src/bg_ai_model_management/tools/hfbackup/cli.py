@@ -76,10 +76,13 @@ from bg_ai_model_management.tools.hfbackup.retention import (
     plan_retention,
 )
 from bg_ai_model_management.tools.hfbackup.source import HubSource
+from bg_ai_model_management.tools.hfbackup.source_modelscope import ModelScopeSource
 from bg_ai_model_management.tools.hfbackup.types import (
     RecheckMode,
     RepoRef,
     RepoType,
+    Source,
+    SourceKind,
     TransferMode,
     VerifyLevel,
     VerifyStatus,
@@ -87,7 +90,7 @@ from bg_ai_model_management.tools.hfbackup.types import (
 
 app = typer.Typer(
     name="hf-backup",
-    help="Back up Hugging Face repos to S3-compatible storage.",
+    help="Back up Hugging Face or ModelScope repos to S3-compatible storage.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -261,6 +264,18 @@ AnyRepoTypeOpt = Annotated[
         help="Restrict to one repository type. Both types are listed by default.",
     ),
 ]
+SourceOpt = Annotated[
+    SourceKind,
+    typer.Option(
+        "--source",
+        envvar="AIMM_SOURCE",
+        case_sensitive=False,
+        help="Upstream hub to mirror from. ModelScope serves models only, and its "
+        "default branch is 'master' rather than 'main'.",
+    ),
+]
+
+
 RevisionOpt = Annotated[
     str,
     typer.Option("--revision", help="Branch, tag or 40-hex commit SHA."),
@@ -405,10 +420,29 @@ def open_destination(settings: Settings) -> Iterator[S3Destination]:
         destination.close()
 
 
-def build_engine(opts: GlobalOptions, settings: Settings, destination: S3Destination) -> Engine:
+@contextmanager
+def open_source(settings: Settings, kind: SourceKind = SourceKind.huggingface) -> Iterator[Source]:
+    """Open the upstream hub, releasing whatever it holds on exit.
+
+    Mirrors `open_destination`: the ModelScope source owns an HTTP connection pool, and
+    a long-lived process (a scheduler embedding this) must not leak one per run.
+    """
+    if kind is SourceKind.modelscope:
+        modelscope = ModelScopeSource(settings.modelscope)
+        try:
+            yield modelscope
+        finally:
+            modelscope.close()
+        return
+    yield HubSource(settings.hub)
+
+
+def build_engine(
+    opts: GlobalOptions, settings: Settings, destination: S3Destination, source: Source
+) -> Engine:
     """Assemble the engine with the console the log handler already owns."""
     return Engine(
-        HubSource(settings.hub),
+        source,
         destination,
         settings,
         console=opts.console,
@@ -626,6 +660,7 @@ def masked_settings(settings: Settings) -> dict[str, Any]:
 @app.command()
 def sync(
     ctx: typer.Context,
+    source: SourceOpt = SourceKind.huggingface,
     repos: Annotated[
         list[str] | None,
         typer.Argument(help="owner/name | datasets/owner/name | owner/name@revision"),
@@ -745,8 +780,8 @@ def sync(
         update_ref=update_ref,
         dry_run=dry_run,
     )
-    with open_destination(settings) as destination:
-        engine = build_engine(opts, settings, destination)
+    with open_destination(settings) as destination, open_source(settings, source) as upstream:
+        engine = build_engine(opts, settings, destination, upstream)
         with file_progress(opts.console, engine, "syncing files"):
             report = engine.sync(request)
 
@@ -797,6 +832,7 @@ def render_sync(console: Console, report: SyncReport, *, dry_run: bool) -> None:
 def verify(
     ctx: typer.Context,
     repo: Annotated[str, typer.Argument(help="owner/name | datasets/owner/name")],
+    source: SourceOpt = SourceKind.huggingface,
     repo_type: RepoTypeOpt = RepoType.models,
     revision: RevisionOpt = "main",
     level: Annotated[
@@ -850,8 +886,8 @@ def verify(
         sample_percent=sample_percent,
         strict=strict,
     )
-    with open_destination(settings) as destination:
-        engine = build_engine(opts, settings, destination)
+    with open_destination(settings) as destination, open_source(settings, source) as upstream:
+        engine = build_engine(opts, settings, destination, upstream)
         with file_progress(opts.console, engine, "verifying files"):
             report = engine.verify(request)
 
@@ -953,8 +989,10 @@ def restore(
         overwrite=overwrite,
         verify_only=verify_only,
     )
-    with open_destination(settings) as destination:
-        engine = build_engine(opts, settings, destination)
+    # restore reads only from S3, so the upstream is never contacted; the default
+    # source keeps `build_engine` honest without adding a flag that does nothing.
+    with open_destination(settings) as destination, open_source(settings) as upstream:
+        engine = build_engine(opts, settings, destination, upstream)
         with file_progress(opts.console, engine, "restoring files"):
             report = engine.restore(request)
 
@@ -1400,6 +1438,7 @@ class Check:
 @app.command()
 def doctor(
     ctx: typer.Context,
+    source: SourceOpt = SourceKind.huggingface,
     backend: BackendOpt = None,
     endpoint_url: EndpointOpt = None,
     bucket: BucketOpt = None,
@@ -1458,19 +1497,30 @@ def doctor(
         if destination is not None:
             destination.close()
 
-    try:
-        user = HubSource(settings.hub).whoami()
-        checks.append(
-            Check(
-                "hugging face",
-                True,
-                f"authenticated as {user}"
-                if user
-                else "unauthenticated - set HF_TOKEN for higher rate limits",
+    if source is SourceKind.modelscope:
+        # No identity probe: mirroring public ModelScope repos needs no credential, and
+        # claiming a user name this tool never confirmed would be worse than saying so.
+        modelscope = ModelScopeSource(settings.modelscope)
+        try:
+            checks.append(Check("modelscope", True, modelscope.ping()))
+        except AimmError as exc:
+            checks.append(Check("modelscope", False, describe(exc)))
+        finally:
+            modelscope.close()
+    else:
+        try:
+            user = HubSource(settings.hub).whoami()
+            checks.append(
+                Check(
+                    "hugging face",
+                    True,
+                    f"authenticated as {user}"
+                    if user
+                    else "unauthenticated - set HF_TOKEN for higher rate limits",
+                )
             )
-        )
-    except AimmError as exc:
-        checks.append(Check("hugging face", False, describe(exc)))
+        except AimmError as exc:
+            checks.append(Check("hugging face", False, describe(exc)))
 
     staging = settings.transfer.staging_dir or Path(tempfile.gettempdir())
     try:

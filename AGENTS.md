@@ -25,8 +25,10 @@ If you are about to create one, you are working from an obsolete brief.
 It is a **swiss-army knife**: one CLI, one config system, one logging and retry
 story, and N independent tools mounted underneath it.
 
-Tool #1 is `aimm hf-backup` — it backs up Hugging Face repos to S3-compatible
-storage and can verify, restore and prune them.
+Tool #1 is `aimm hf-backup` — it backs up repos from Hugging Face **or ModelScope**
+to S3-compatible storage and can verify, restore and prune them. The name is
+historical: `--source` selects the hub, and renaming the subcommand would break
+every existing script and profile. See `docs/sources.md` and ADR 0007.
 
 ## The naming split (three different names, all correct)
 
@@ -68,12 +70,14 @@ src/bg_ai_model_management/
 ├── main.py            console entry point; the ONLY module that calls sys.exit()
 ├── cli.py             root Typer app + the aimm.tools entry-point loader
 ├── errors.py          the typed exception hierarchy and the exit codes
+├── shutdown.py        cooperative SIGTERM/SIGINT flag; workers poll it
 ├── logging_setup.py   stdlib logging + the secret-redacting filter
 ├── net/retry.py       tenacity retry helper with an injectable sleep
 ├── integrity/hashing.py
 ├── config/            models.py (pydantic settings), loader.py, interpolation.py
 └── tools/
-    └── hfbackup/      types, keys, source, destination, manifest, planner,
+    └── hfbackup/      types, keys, source (Hugging Face),
+                       source_modelscope, destination, manifest, planner,
                        retention, catalog, engine, cli
 ```
 
@@ -125,6 +129,14 @@ name. Two properties it guarantees, which your tool must not break:
    error strings and all prose.
 7. **`huggingface_hub` is 1.x.** `hf_transfer` does not exist there. Never add
    it.
+8. **A new upstream hub implements `Source`,** the protocol in
+   `tools/hfbackup/types.py` — six methods and a `kind`. Do not add a dispatch
+   table, a plugin registry or a hub-selecting field inside `HubSettings`: each hub
+   keeps its own settings block so a token can never reach the wrong host.
+9. **`is_lfs` selects the integrity anchor, not a storage technology.** sha256 when
+   set, git blob id otherwise. A hub that attests a content sha256 for every file
+   reports `is_lfs=True` throughout, and the manifest records which hub vouched for
+   the digest in `sha256_source`.
 
 ## Exit codes
 
@@ -177,6 +189,8 @@ characters, no trailing period (`added X`, not `add X`). **Never**
 | How does config resolve — flag vs env vs profile vs default? | `config/loader.py` |
 | Why was this file skipped or re-uploaded? | `tools/hfbackup/planner.py` |
 | Inline, stream or disk — who decides? | `tools/hfbackup/engine.py` |
+| How do I add another upstream hub? | `tools/hfbackup/types.py` (`Source`), `docs/adr/0007-multi-hub-sources.md` |
+| Why was an upload aborted on `docker stop`? | `shutdown.py` |
 | What exactly is verified, and against what? | `tools/hfbackup/manifest.py`, `integrity/hashing.py` |
 | What does an S3 key look like? | `tools/hfbackup/keys.py` |
 | Why did `prune` refuse? | `tools/hfbackup/retention.py` |

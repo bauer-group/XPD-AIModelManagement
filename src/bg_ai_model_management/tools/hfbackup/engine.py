@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from bg_ai_model_management import shutdown
 from bg_ai_model_management.errors import (
     ChecksumMismatchError,
     ConfigError,
@@ -62,11 +63,13 @@ from bg_ai_model_management.tools.hfbackup.planner import (
     choose_path,
 )
 from bg_ai_model_management.tools.hfbackup.types import (
+    ATTESTED_SHA256_SOURCE,
     FileResult,
     PinnedRepo,
     RecheckMode,
     RepoRef,
     RepoType,
+    Source,
     SourceFile,
     TransferPath,
     UploadResult,
@@ -79,7 +82,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only; engine must not import rich
 
     from bg_ai_model_management.config.models import Settings
     from bg_ai_model_management.tools.hfbackup.destination import S3Destination
-    from bg_ai_model_management.tools.hfbackup.source import HubSource
 
 log = logging.getLogger(__name__)
 
@@ -218,7 +220,7 @@ class Engine:
 
     def __init__(
         self,
-        source: HubSource,
+        source: Source,
         destination: S3Destination,
         settings: Settings,
         *,
@@ -298,6 +300,17 @@ class Engine:
                         for pending in futures:
                             pending.cancel()
                         break
+                if shutdown.is_requested():
+                    # Stop handing out new work; the pool still drains what is running,
+                    # and those parts abort themselves at the next part boundary.
+                    for pending in futures:
+                        pending.cancel()
+                    break
+
+        # A cancelled run is not a failed one, and it must not look like a complete
+        # revision: raising here skips the manifest, so the next run re-plans this
+        # repository from scratch rather than trusting a half-written record.
+        shutdown.raise_if_requested(f"sync of {ref.repo_id}")
 
         manifest_key: str | None = None
         if errors:
@@ -363,6 +376,9 @@ class Engine:
         staging_root: Path,
     ) -> FileResult:
         """Transfer one file, choosing and if necessary downgrading its path."""
+        # Queued work must not start a fresh download once shutdown was requested;
+        # the pool holds one future per file and drains them all otherwise.
+        shutdown.raise_if_requested(f"transfer of {file.path}")
         key = keys.file_key(
             self.settings.s3.prefix,
             pinned.repo_type,
@@ -478,7 +494,13 @@ class Engine:
             # "hf-lfs" asserts the digest was CONFIRMED against Hugging Face's own
             # value. An LFS file whose `lfs.sha256` is absent was compared to nothing,
             # so it is "computed" like any non-LFS file.
-            sha256_source="hf-lfs" if file.is_lfs and file.sha256 is not None else "computed",
+            # Which hub vouched for this digest, or "computed" when only this tool
+            # hashed the bytes — the manifest must not claim a provenance it lacks.
+            sha256_source=(
+                ATTESTED_SHA256_SOURCE[self.source.kind]
+                if file.is_lfs and file.sha256 is not None
+                else "computed"
+            ),
             blob_id=file.blob_id,
             xet_hash=file.xet_hash,
             is_lfs=file.is_lfs,
