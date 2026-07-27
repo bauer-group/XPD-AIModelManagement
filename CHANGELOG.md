@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v1.1.0 (2026-07-27)
+
+### Chores
+
+- **ci**: Removed redundant teams notification
+  ([`be4c40d`](https://github.com/bauer-group/XPD-AIModelManagement/commit/be4c40d6013157894576270f1654f5e94cfce64c))
+
+### Documentation
+
+- Update README.MD [automated]
+  ([`f8471d8`](https://github.com/bauer-group/XPD-AIModelManagement/commit/f8471d8255d3200006e20ab94561191cab5cf6d3))
+
+### Features
+
+- **shutdown**: Added cooperative SIGTERM handling
+  ([`7d71ac2`](https://github.com/bauer-group/XPD-AIModelManagement/commit/7d71ac232e719a6e853cd7a8aa2db92f97ca4982))
+
+- **source**: Added ModelScope as a second upstream hub
+  ([`b3208c8`](https://github.com/bauer-group/XPD-AIModelManagement/commit/b3208c801a86f0828540815caea86e26e4ca4de0))
+
+
 ## v1.0.3 (2026-07-21)
 
 ### Bug Fixes
