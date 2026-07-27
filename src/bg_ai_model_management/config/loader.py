@@ -4,7 +4,7 @@ Precedence, highest wins:
 
 1. CLI overrides (passed as ``overrides``, injected as init kwargs)
 2. ``AIMM_*`` environment variables
-3. ``HF_TOKEN`` (the one unprefixed variable we honour)
+3. ``HF_TOKEN`` / ``MODELSCOPE_API_TOKEN`` (the unprefixed hub variables we honour)
 4. Docker secrets under ``/run/secrets``
 5. the profile YAML file
 6. model defaults
@@ -38,6 +38,16 @@ PROFILE_ENV: str = "AIMM_PROFILE"
 PROFILE_FILENAMES: tuple[str, ...] = ("aimm.yaml", "aimm.yml")
 BACKEND_ENV: str = "AIMM_BACKEND"
 HF_TOKEN_ENV: str = "HF_TOKEN"
+MODELSCOPE_TOKEN_ENV: str = "MODELSCOPE_API_TOKEN"
+
+#: Unprefixed environment variables each hub's own ecosystem already defines,
+#: mapped onto the settings section they belong to. A ``validation_alias`` cannot
+#: do this: the env source resolves nested fields as ``AIMM_<SECTION>__<FIELD>``,
+#: so an unprefixed alias is never even looked up — it just silently stays unset.
+UNPREFIXED_TOKENS: dict[str, str] = {
+    HF_TOKEN_ENV: "hub",
+    MODELSCOPE_TOKEN_ENV: "modelscope",
+}
 
 _USER_CONFIG_RELPATH: tuple[str, str] = ("aimm", "config.yaml")
 
@@ -146,24 +156,26 @@ def _select_backend(
     return data
 
 
-class _HfTokenSource(PydanticBaseSettingsSource):
-    """Maps the unprefixed ``HF_TOKEN`` variable onto ``hub.token``.
+class _UnprefixedTokenSource(PydanticBaseSettingsSource):
+    """Maps unprefixed hub tokens onto their settings section.
 
-    ``HF_TOKEN`` is the Hugging Face ecosystem's own variable name, so it carries
-    no ``AIMM_`` prefix and the ordinary env source cannot see it. It sits below
-    ``AIMM_HUB__TOKEN`` so an explicit aimm setting always wins.
+    ``HF_TOKEN`` and ``MODELSCOPE_API_TOKEN`` are each ecosystem's own variable
+    name, so they carry no ``AIMM_`` prefix and the ordinary env source cannot see
+    them. This sits below ``AIMM_HUB__TOKEN`` / ``AIMM_MODELSCOPE__TOKEN`` so an
+    explicit aimm setting always wins.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], token: str) -> None:
+    def __init__(self, settings_cls: type[BaseSettings], tokens: dict[str, str]) -> None:
         super().__init__(settings_cls)
-        self._token = token
+        #: section name -> token value
+        self._tokens = tokens
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         # Not used: this source yields its whole document from __call__.
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:
-        return {"hub": {"token": self._token}}
+        return {section: {"token": token} for section, token in self._tokens.items()}
 
 
 def load_settings(
@@ -187,7 +199,11 @@ def load_settings(
     """
     profile_path = find_profile(profile)
     init_kwargs = _expand_overrides(overrides or {})
-    hf_token = os.environ.get(HF_TOKEN_ENV)
+    unprefixed = {
+        section: value
+        for variable, section in UNPREFIXED_TOKENS.items()
+        if (value := os.environ.get(variable))
+    }
 
     class _Settings(Settings):
         @classmethod
@@ -201,8 +217,8 @@ def load_settings(
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             # HIGHEST PRIORITY FIRST. Do not reorder.
             sources: list[PydanticBaseSettingsSource] = [init_settings, env_settings]
-            if hf_token:
-                sources.append(_HfTokenSource(settings_cls, hf_token))
+            if unprefixed:
+                sources.append(_UnprefixedTokenSource(settings_cls, unprefixed))
             # Plain secrets_dir never reaches nested models: a file named
             # s3__secret_access_key is silently ignored and the field stays None.
             sources.append(

@@ -190,6 +190,50 @@ def test_hub_token_is_none_when_nothing_supplies_one(profile: Path) -> None:
     assert settings.hub.token is None
 
 
+# ------------------------------------------------- the MODELSCOPE_API_TOKEN rung
+
+
+def test_modelscope_token_is_read_without_the_aimm_prefix(
+    profile: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `validation_alias` cannot do this — the env source only resolves
+    `AIMM_MODELSCOPE__TOKEN`, so an unprefixed alias would stay silently unset and
+    every private-repo request would fail with a confusing 401."""
+    monkeypatch.setenv("MODELSCOPE_API_TOKEN", "ms_from_ecosystem")
+    settings = load_settings(profile=profile)
+    assert settings.modelscope.token is not None
+    assert settings.modelscope.token.get_secret_value() == "ms_from_ecosystem"
+
+
+def test_an_explicit_aimm_modelscope_token_beats_the_unprefixed_one(
+    profile: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MODELSCOPE_API_TOKEN", "ms_from_ecosystem")
+    monkeypatch.setenv("AIMM_MODELSCOPE__TOKEN", "ms_from_aimm")
+    settings = load_settings(profile=profile)
+    assert settings.modelscope.token is not None
+    assert settings.modelscope.token.get_secret_value() == "ms_from_aimm"
+
+
+def test_the_two_hub_tokens_never_cross(
+    profile: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An HF_TOKEN must never reach modelscope.cn, nor the reverse."""
+    monkeypatch.setenv("HF_TOKEN", "hf_only")
+    monkeypatch.setenv("MODELSCOPE_API_TOKEN", "ms_only")
+    settings = load_settings(profile=profile)
+    assert settings.hub.token is not None
+    assert settings.modelscope.token is not None
+    assert settings.hub.token.get_secret_value() == "hf_only"
+    assert settings.modelscope.token.get_secret_value() == "ms_only"
+
+
+def test_modelscope_token_is_none_when_nothing_supplies_one(profile: Path) -> None:
+    """Public ModelScope repositories mirror anonymously, so None is the norm."""
+    settings = load_settings(profile=profile)
+    assert settings.modelscope.token is None
+
+
 # --------------------------------------------------------------------- secret hygiene
 
 
