@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v1.1.1 (2026-07-27)
+
+### Bug Fixes
+
+- **config**: Fixed MODELSCOPE_API_TOKEN being ignored
+  ([`419b222`](https://github.com/bauer-group/XPD-AIModelManagement/commit/419b22243d104bc721fca30ac7e6a40c2119ae44))
+
+### Documentation
+
+- Update README.MD [automated]
+  ([`34c35a2`](https://github.com/bauer-group/XPD-AIModelManagement/commit/34c35a2463cb48be988a3091e1c45b43044df064))
+
+
 ## v1.1.0 (2026-07-27)
 
 ### Chores
