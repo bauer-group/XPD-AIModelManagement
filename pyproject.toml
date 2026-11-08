@@ -48,7 +48,7 @@ dependencies = [
     # 1.x API verified on 1.24.0: repo_info().sha, list_repo_tree, RepoFile.path,
     # the `errors` module, get_session() -> httpx.Client. Capped below 2 because
     # streaming via get_session() is working-but-not-blessed.
-    "huggingface_hub>=1.24.0,<2.0.0",
+    "huggingface_hub>=1.24.0,<3.0.0",
     # Config(request_checksum_calculation=...) FIRST EXISTS in botocore 1.36.0.
     # Bisected: 1.35.99 lacks the key entirely and the env vars silently do
     # nothing there. botocore is pinned explicitly, not just transitively.
