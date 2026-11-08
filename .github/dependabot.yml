@@ -2,7 +2,7 @@
 #  🤖 Dependabot
 # -----------------------------------------------------------------------------
 #  WHAT         : Weekly dependency updates for GitHub Actions and pip.
-#  WHEN         : Sundays, 06:30 Etc/UTC.
+#  WHEN         : Sundays, 13:30 Etc/UTC.
 #  PRODUCES     : Grouped minor+patch PRs with semantic commit prefixes, so
 #                 python-semantic-release classifies them correctly.
 # =============================================================================
@@ -15,7 +15,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
-      time: "06:30"
+      time: "13:30"
       timezone: "Etc/UTC"
     commit-message:
       prefix: "chore(ci)"
@@ -34,7 +34,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
-      time: "06:30"
+      time: "13:30"
       timezone: "Etc/UTC"
     commit-message:
       prefix: "chore(deps)"
